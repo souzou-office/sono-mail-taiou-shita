@@ -47,8 +47,11 @@ export default function App() {
   const [dismissed, setDismissed] = useState({});
   const [undoItem, setUndoItem] = useState(null);
   const [undoTimer, setUndoTimer] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [learningStats, setLearningStats] = useState(null);
+  const [showStats, setShowStats] = useState(false);
 
-  useEffect(() => {
+  function loadItems() {
     if (!GAS_URL) {
       setItems([
         { threadId: "1", messageId: "m1", subject: "設立の件で相談", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
@@ -59,11 +62,38 @@ export default function App() {
       ]);
       return;
     }
+    setRefreshing(true);
     fetch(GAS_URL)
       .then((r) => r.json())
-      .then((data) => setItems(data.pending || data))
-      .catch(() => setError("取得できませんでした"));
-  }, []);
+      .then((data) => { setItems(data.pending || data); setError(null); })
+      .catch(() => setError("取得できませんでした"))
+      .finally(() => setRefreshing(false));
+  }
+
+  function loadLearningStats() {
+    if (!API_URL) {
+      setLearningStats({
+        learnedPatterns: { total: 3, confirmed: 1, items: [
+          { senderEmail: "noreply@github.com", result: "返信不要", hitCount: 5, confirmed: true },
+          { senderEmail: "tanaka@example.com", result: "返信必要", hitCount: 2, confirmed: false },
+          { senderEmail: "info@newsletter.jp", result: "返信不要", hitCount: 1, confirmed: false },
+        ]},
+        senderCategories: { total: 4, breakdown: { HUMAN: 2, NEWSLETTER: 1, NOTIFICATION: 1 } },
+        feedbackCount: 7,
+      });
+      return;
+    }
+    fetch(`${API_URL}/learning-stats?userId=demo`)
+      .then((r) => r.json())
+      .then((data) => setLearningStats(data))
+      .catch(() => {});
+  }
+
+  useEffect(() => { loadItems(); }, []);
+
+  function handleReplied(item) {
+    setItems((prev) => prev ? prev.filter((it) => it.threadId !== item.threadId) : prev);
+  }
 
   function handleDismiss(item) {
     // 前のundoタイマーがあれば確定させる
@@ -128,6 +158,7 @@ export default function App() {
         .open-btn, .dismiss-btn { opacity: 0; transition: opacity 0.15s; }
         .table-row:hover .open-btn, .table-row:hover .dismiss-btn { opacity: 1; }
         .dismiss-btn:hover { background: #fee2e2 !important; color: #b91c1c !important; }
+        .replied-btn:hover { background: #dcfce7 !important; color: #16a34a !important; }
         .undo-toast { animation: slideUp 0.2s ease; }
         .undo-btn:hover { background: #4338ca !important; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
@@ -165,6 +196,28 @@ export default function App() {
               要注意 {warningCount}
             </span>
           )}
+          <button
+            onClick={() => { setShowStats(!showStats); if (!showStats && !learningStats) loadLearningStats(); }}
+            className="stats-btn"
+            style={{
+              fontSize: 11, color: "#666", background: showStats ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
+              borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+            }}
+          >
+            学習状況
+          </button>
+          <button
+            onClick={loadItems}
+            disabled={refreshing}
+            className="refresh-btn"
+            style={{
+              fontSize: 11, color: "#666", background: "#fff", border: "1px solid #e5e5e3",
+              borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+              opacity: refreshing ? 0.5 : 1,
+            }}
+          >
+            {refreshing ? "更新中..." : "更新"}
+          </button>
         </div>
       </header>
 
@@ -177,6 +230,63 @@ export default function App() {
           )}
         </div>
 
+        {/* ===== 学習状況パネル ===== */}
+        {showStats && learningStats && (
+          <div style={{
+            background: "#fff", borderRadius: 8, border: "1px solid #e5e5e3",
+            padding: 16, marginBottom: 16, animation: "fadeIn 0.2s ease",
+          }}>
+            <div style={{ display: "flex", gap: 24, marginBottom: 12, fontSize: 13 }}>
+              <div>
+                <span style={{ color: "#999" }}>学習パターン: </span>
+                <span style={{ fontWeight: 600 }}>{learningStats.learnedPatterns.total}件</span>
+                <span style={{ color: "#16a34a", marginLeft: 4 }}>({learningStats.learnedPatterns.confirmed}件確定)</span>
+              </div>
+              <div>
+                <span style={{ color: "#999" }}>フィードバック数: </span>
+                <span style={{ fontWeight: 600 }}>{learningStats.feedbackCount}回</span>
+              </div>
+              <div>
+                <span style={{ color: "#999" }}>送信者分類: </span>
+                <span style={{ fontWeight: 600 }}>{learningStats.senderCategories.total}件</span>
+              </div>
+            </div>
+
+            {learningStats.learnedPatterns.items.length > 0 && (
+              <div style={{ fontSize: 12, color: "#555" }}>
+                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>学習済み送信者</div>
+                {learningStats.learnedPatterns.items.map((p, i) => (
+                  <div key={i} style={{ display: "flex", gap: 12, padding: "3px 0", alignItems: "center" }}>
+                    <span style={{ minWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.senderEmail}</span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 3,
+                      background: p.result === "返信必要" ? "#e8f4f8" : "#f5f5f4",
+                      color: p.result === "返信必要" ? "#2b6cb0" : "#888",
+                    }}>
+                      {p.result}
+                    </span>
+                    <span style={{ color: "#bbb" }}>{p.hitCount}回</span>
+                    {p.confirmed && <span style={{ color: "#16a34a", fontSize: 10, fontWeight: 600 }}>確定</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {Object.keys(learningStats.senderCategories.breakdown).length > 0 && (
+              <div style={{ fontSize: 12, color: "#555", marginTop: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>送信者カテゴリ内訳</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {Object.entries(learningStats.senderCategories.breakdown).map(([cat, count]) => (
+                    <span key={cat} style={{ background: "#f5f5f4", padding: "2px 8px", borderRadius: 4, fontSize: 11 }}>
+                      {cat}: {count}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ===== テーブル ===== */}
         <div style={{
           background: "#fff",
@@ -187,7 +297,7 @@ export default function App() {
           {/* ヘッダー */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px",
+            gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
             borderBottom: "1px solid #e5e5e3",
             background: "#fafaf9",
             fontSize: 11,
@@ -201,6 +311,7 @@ export default function App() {
             <div style={{ padding: "8px 12px" }}>送信者</div>
             <div style={{ padding: "8px 12px" }}>受信日時</div>
             <div style={{ padding: "8px 12px" }}>経過</div>
+            <div style={{ padding: "8px 12px" }}></div>
             <div style={{ padding: "8px 12px" }}></div>
           </div>
 
@@ -232,7 +343,7 @@ export default function App() {
                 onMouseLeave={() => setHoveredId(null)}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px",
+                  gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
                   borderBottom: i < visibleItems.length - 1 ? "1px solid #f0f0ee" : "none",
                   animation: `fadeIn 0.2s ease ${i * 0.03}s both`,
                   opacity: isDismissing ? 0.3 : 1,
@@ -287,6 +398,21 @@ export default function App() {
                 {/* 経過 */}
                 <div style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
                   {timeAgo(item.date)}
+                </div>
+
+                {/* 対応済みボタン */}
+                <div style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
+                  <button
+                    className="dismiss-btn replied-btn"
+                    onClick={() => handleReplied(item)}
+                    title="返信済み（リストから消します）"
+                    style={{
+                      fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
+                      borderRadius: 4, padding: "2px 6px", cursor: "pointer", whiteSpace: "nowrap",
+                    }}
+                  >
+                    済み
+                  </button>
                 </div>
 
                 {/* 対応不要ボタン */}
