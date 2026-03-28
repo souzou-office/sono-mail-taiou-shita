@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { google } from "googleapis";
 import { config } from "../config.js";
 import { createGmailClient, getAuthUrl } from "../gmail/client.js";
-import { scanAndProcess, processMessage } from "../rules/run-rules.js";
+import { scanAndProcess, processMessage, submitFeedback } from "../rules/run-rules.js";
 
 const prisma = new PrismaClient();
 export const router = Router();
@@ -186,6 +186,82 @@ router.post("/test-rules", async (req, res) => {
       actions: m.rule.actions.map((a) => a.type),
     })),
   });
+});
+
+// ============================================
+// Classification Feedback（精度改善 #1）
+// ============================================
+
+/** ユーザーがAIの判定を修正する */
+router.post("/feedback", async (req, res) => {
+  const { userId, messageId, threadId, senderEmail, previousRuleId, correctedRuleId } = req.body;
+
+  if (!userId || !messageId || !correctedRuleId || !senderEmail) {
+    return res.status(400).json({ error: "userId, messageId, senderEmail, correctedRuleId は必須です" });
+  }
+
+  await submitFeedback(userId, messageId, threadId, senderEmail, previousRuleId, correctedRuleId);
+  res.json({ ok: true, message: "フィードバック保存完了。次回から同じ送信者に反映されます。" });
+});
+
+/** フィードバック一覧 */
+router.get("/feedback", async (req, res) => {
+  const userId = req.query.userId as string;
+  const feedbacks = await prisma.classificationFeedback.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  res.json(feedbacks);
+});
+
+// ============================================
+// Learned Patterns（精度改善 #2）
+// ============================================
+
+router.get("/learned-patterns", async (req, res) => {
+  const userId = req.query.userId as string;
+  const patterns = await prisma.learnedPattern.findMany({
+    where: { userId },
+    orderBy: [{ confirmed: "desc" }, { hitCount: "desc" }],
+  });
+
+  // ルール名もJOIN
+  const ruleIds = [...new Set(patterns.map((p) => p.ruleId))];
+  const rules = await prisma.rule.findMany({
+    where: { id: { in: ruleIds } },
+    select: { id: true, name: true },
+  });
+  const ruleMap = Object.fromEntries(rules.map((r) => [r.id, r.name]));
+
+  res.json(patterns.map((p) => ({
+    ...p,
+    ruleName: ruleMap[p.ruleId] || "(不明)",
+  })));
+});
+
+/** パターンを手動で削除（再学習させたい時） */
+router.delete("/learned-patterns/:id", async (req, res) => {
+  await prisma.learnedPattern.delete({ where: { id: req.params.id } });
+  res.json({ ok: true });
+});
+
+// ============================================
+// Sender History（精度改善 #3）
+// ============================================
+
+router.get("/sender-history", async (req, res) => {
+  const userId = req.query.userId as string;
+  const histories = await prisma.senderHistory.findMany({
+    where: { userId },
+    orderBy: { messageCount: "desc" },
+    take: 50,
+  });
+  res.json(histories.map((h) => ({
+    ...h,
+    subjects: JSON.parse(h.subjects),
+    snippets: JSON.parse(h.snippets),
+  })));
 });
 
 // ============================================

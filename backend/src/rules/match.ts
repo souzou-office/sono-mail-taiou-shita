@@ -2,31 +2,61 @@ import type { SenderCategoryType } from "@prisma/client";
 import type { ParsedMessage, RuleWithActions, RuleMatch } from "./types.js";
 import { aiChooseRule } from "../ai/classify-email.js";
 
+interface LearnedPatternInfo {
+  senderEmail: string;
+  ruleId: string;
+  confirmed: boolean;
+}
+
+interface FeedbackInfo {
+  senderEmail: string;
+  correctedRuleId: string;
+}
+
 /**
- * 3層マッチングエンジン（Inbox Zero のアーキテクチャに準拠）
+ * 4層マッチングエンジン（精度改善版）
+ *
+ * Layer 0: Learned Pattern（確定パターン → AIスキップ）
+ *   - 同じ送信者が3回連続で同じルールにマッチ → 確定パターンとして保存
+ *   - 確定済みならAI呼び出し不要で即マッチ
  *
  * Layer 1: 静的パターンマッチ（高速・確実）
  *   - from/to/subject/body のワイルドカード・正規表現
  *
  * Layer 2: 送信者カテゴリマッチ（学習パターン）
  *   - 過去に分類済みの送信者情報を活用
- *   - ルールの instructions に "NEWSLETTER" 等のカテゴリが含まれていればマッチ
  *
  * Layer 3: AI判定（高精度・低速）
- *   - Claude で自然言語の instructions を評価
- *   - Layer 1/2 で確定しなかったルールのみAIに送る
+ *   - Classification Feedbackを文脈として渡す
+ *   - Layer 0/1/2 で確定しなかったルールのみ
  */
 export async function findMatchingRules({
   rules,
   message,
   senderCategory,
+  learnedPattern,
+  feedbacks,
 }: {
   rules: RuleWithActions[];
   message: ParsedMessage;
   senderCategory?: { category: SenderCategoryType; confidence: number } | null;
+  learnedPattern?: LearnedPatternInfo | null;
+  feedbacks?: FeedbackInfo[];
 }): Promise<RuleMatch[]> {
   const enabledRules = rules.filter((r) => r.enabled).sort((a, b) => a.order - b.order);
   if (enabledRules.length === 0) return [];
+
+  // ---- Layer 0: Learned Pattern（確定パターン → 即マッチ） ----
+  if (learnedPattern?.confirmed) {
+    const confirmedRule = enabledRules.find((r) => r.id === learnedPattern.ruleId);
+    if (confirmedRule) {
+      return [{
+        rule: confirmedRule,
+        matchType: "LEARNED",
+        reason: `学習パターン確定: ${learnedPattern.senderEmail} → "${confirmedRule.name}"`,
+      }];
+    }
+  }
 
   const matches: RuleMatch[] = [];
   const needsAiEvaluation: RuleWithActions[] = [];
@@ -55,14 +85,14 @@ export async function findMatchingRules({
     }
   }
 
-  // 静的/カテゴリで十分なマッチがあればAIスキップ（コスト最適化）
+  // 静的/カテゴリで十分なマッチがあればAIスキップ
   if (matches.length > 0 && needsAiEvaluation.length === 0) {
     return matches;
   }
 
-  // ---- Layer 3: AI判定 ----
+  // ---- Layer 3: AI判定（フィードバック付き） ----
   if (needsAiEvaluation.length > 0) {
-    const aiSelections = await aiChooseRule(message, needsAiEvaluation);
+    const aiSelections = await aiChooseRule(message, needsAiEvaluation, feedbacks);
 
     for (const sel of aiSelections) {
       const rule = needsAiEvaluation.find((r) => r.id === sel.ruleId);
@@ -81,7 +111,7 @@ export async function findMatchingRules({
 
 interface StaticMatchResult {
   matched: boolean;
-  excluded: boolean; // 明確に条件外
+  excluded: boolean;
   reason: string;
 }
 
@@ -122,22 +152,15 @@ function matchStaticConditions(
     return { matched: true, excluded: false, reason: `静的マッチ: ${anyMatch.field}="${anyMatch.pattern}"` };
   }
 
-  // OR条件があって1つもマッチしない → 除外ではない（AI判定の余地あり）
   return { matched: false, excluded: false, reason: "" };
 }
 
-/**
- * ワイルドカード＋パイプ区切りパターンマッチ
- * 例: "*.example.com | tanaka@*" → OR条件
- * 例: "/正規表現/" → 正規表現
- */
 function matchPattern(pattern: string, value: string): boolean {
   const patterns = pattern.split(/\s*\|\s*/);
   return patterns.some((p) => matchSinglePattern(p.trim(), value));
 }
 
 function matchSinglePattern(pattern: string, value: string): boolean {
-  // 正規表現: /pattern/flags
   const regexMatch = pattern.match(/^\/(.+)\/([gimsuy]*)$/);
   if (regexMatch) {
     try {
@@ -148,7 +171,6 @@ function matchSinglePattern(pattern: string, value: string): boolean {
     }
   }
 
-  // ワイルドカード: * を .* に変換
   const escaped = pattern
     .toLowerCase()
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -166,7 +188,6 @@ function matchSenderCategory(
 ): { matched: boolean; reason: string } {
   if (!rule.instructions) return { matched: false, reason: "" };
 
-  // instructions 内にカテゴリキーワードがあればマッチ
   const categoryKeywords: Record<SenderCategoryType, string[]> = {
     HUMAN: ["人間", "個人", "human", "conversation", "会話"],
     NEWSLETTER: ["メルマガ", "ニュースレター", "newsletter"],
