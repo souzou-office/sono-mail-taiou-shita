@@ -51,7 +51,7 @@ function scanEmails() {
       subject: thread.getFirstMessageSubject(),
       from: latest.getFrom(),
       date: latest.getDate().toISOString(),
-      snippet: latest.getPlainBody().substring(0, 300),
+      snippet: latest.getPlainBody().substring(0, 2000),
     });
   }
 
@@ -150,7 +150,7 @@ function checkReplies() {
         needsJudgment.push({
           ...item,
           date: latestDate,
-          snippet: latest.getPlainBody().substring(0, 300),
+          snippet: latest.getPlainBody().substring(0, 2000),
           from: latest.getFrom(),
         });
       } else {
