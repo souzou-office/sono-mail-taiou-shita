@@ -185,13 +185,18 @@ ${details}`;
 }
 
 // ============================================
-// 古いアイテム掃除（週1トリガー）
+// 重複・不整合の掃除（週1トリガー）
 // ============================================
 function cleanup() {
   const items = getStoredItems();
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const fresh = items.filter(i => new Date(i.date) > oneWeekAgo);
-  saveItems(fresh);
+  // threadIdで重複排除（新しい方を残す）
+  const seen = new Map();
+  for (const item of items) {
+    if (!seen.has(item.threadId) || new Date(item.date) > new Date(seen.get(item.threadId).date)) {
+      seen.set(item.threadId, item);
+    }
+  }
+  saveItems([...seen.values()]);
 }
 
 // ============================================
@@ -295,7 +300,7 @@ function setupTriggers() {
     .everyHours(3)
     .create();
 
-  // 毎週月曜に古いの掃除
+  // 毎週月曜に重複掃除
   ScriptApp.newTrigger("cleanup")
     .timeBased()
     .onWeekDay(ScriptApp.WeekDay.MONDAY)
