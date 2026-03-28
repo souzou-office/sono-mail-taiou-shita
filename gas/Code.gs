@@ -93,6 +93,7 @@ ${details}`;
       subject: remaining[i].subject,
       from: remaining[i].from,
       date: remaining[i].date,
+      snippet: remaining[i].snippet,
     }));
 
   // 既存データとマージ（古いのも残す）
