@@ -14,8 +14,6 @@ export function getAuthUrl(): string {
     prompt: "consent",
     scope: [
       "https://www.googleapis.com/auth/gmail.readonly",
-      "https://www.googleapis.com/auth/gmail.modify",
-      "https://www.googleapis.com/auth/gmail.labels",
     ],
   });
 }
@@ -29,8 +27,18 @@ export function createGmailClient(accessToken: string, refreshToken?: string | n
   auth.setCredentials({ access_token: accessToken, refresh_token: refreshToken });
   const gmail = google.gmail({ version: "v1", auth });
 
+  let _myEmail: string | null = null;
+
   return {
     auth,
+
+    /** 自分のメールアドレスを取得（キャッシュ） */
+    async getMyEmail(): Promise<string> {
+      if (_myEmail) return _myEmail;
+      const profile = await gmail.users.getProfile({ userId: "me" });
+      _myEmail = profile.data.emailAddress || "";
+      return _myEmail;
+    },
 
     /** 未読メール一覧を取得 */
     async fetchUnrepliedMessages(hours: number): Promise<ParsedMessage[]> {

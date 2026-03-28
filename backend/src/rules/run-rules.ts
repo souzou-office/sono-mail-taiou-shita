@@ -1,155 +1,130 @@
 import { PrismaClient } from "@prisma/client";
 import type { GmailClient } from "../gmail/client.js";
-import type { ParsedMessage, RuleWithActions, RuleMatch } from "./types.js";
-import { findMatchingRules } from "./match.js";
-import { executeActions } from "./execute.js";
+import type { ParsedMessage, PendingItem, NeedsReplyResult } from "./types.js";
 import { categorizeSender } from "../ai/categorize-sender.js";
+import { judgeNeedsReply } from "../ai/judge-reply.js";
 
 const prisma = new PrismaClient();
 
-const LEARNED_PATTERN_THRESHOLD = 3; // この回数連続で同じルール → 確定
+const LEARNED_PATTERN_THRESHOLD = 3;
+
+// 返信不要と判断できる送信者カテゴリ
+const SKIP_CATEGORIES = new Set([
+  "NEWSLETTER", "NOTIFICATION", "MARKETING", "RECEIPT", "CALENDAR", "COLD_EMAIL",
+]);
 
 /**
- * メール1通に対してルールを適用する完全パイプライン
+ * メール1通に対して「返信が必要か？」を判定する
  *
- * 1. 送信者の過去メール履歴を取得・更新（精度改善 #3）
- * 2. 送信者を分類（過去メール文脈付き）
- * 3. Learned Pattern チェック（精度改善 #2）
- * 4. Classification Feedback 取得（精度改善 #1）
- * 5. 4層マッチングでルール選択
- * 6. アクション実行
- * 7. Learned Pattern 更新
- * 8. 実行履歴をDB保存
+ * ① 送信者カテゴリ（キャッシュ） → メルマガ/通知なら即スキップ
+ * ② 学習パターン（DB） → 過去3回「返信不要」なら即スキップ
+ * ③ AI判定 → ①②で決まらない時だけ呼ぶ（コスト最小化）
  */
-export async function processMessage(
-  gmail: GmailClient,
-  message: ParsedMessage,
+export async function judgeMessage(
   userId: string,
-): Promise<{ matches: RuleMatch[]; executed: boolean }> {
-  // ルール取得
-  const rules = await prisma.rule.findMany({
-    where: { userId, enabled: true },
-    include: { actions: { orderBy: { order: "asc" } } },
-    orderBy: { order: "asc" },
-  });
+  message: ParsedMessage,
+): Promise<NeedsReplyResult> {
 
-  if (rules.length === 0) {
-    return { matches: [], executed: false };
-  }
-
-  // ---- 精度改善 #3: 送信者の過去メール履歴を更新 ----
+  // ---- 送信者の過去メール履歴を更新 ----
   const senderHistory = await updateSenderHistory(userId, message);
 
-  // ---- 送信者カテゴリ取得（過去メール文脈付き） ----
-  const senderCategory = await getOrAnalyzeSenderCategory(
-    userId,
-    message,
-    senderHistory,
-  );
+  // ---- ① 送信者カテゴリで即判定 ----
+  const senderCategory = await getOrAnalyzeSenderCategory(userId, message, senderHistory);
 
-  // ---- 精度改善 #2: Learned Pattern 確認 ----
+  if (senderCategory && SKIP_CATEGORIES.has(senderCategory.category) && senderCategory.confidence >= 0.7) {
+    await recordResult(userId, message, false, "SENDER_CATEGORY", `送信者カテゴリ: ${senderCategory.category}`);
+    return { needsReply: false, reason: `送信者カテゴリ: ${senderCategory.category}`, skippedBy: "SENDER_CATEGORY" };
+  }
+
+  // ---- ② 学習パターンで即判定 ----
   const learnedPattern = await prisma.learnedPattern.findUnique({
     where: { userId_senderEmail: { userId, senderEmail: message.fromAddress } },
   });
 
-  // ---- 精度改善 #1: Classification Feedback 取得 ----
+  if (learnedPattern?.confirmed) {
+    const needsReply = learnedPattern.ruleId === "NEEDS_REPLY";
+    await recordResult(userId, message, needsReply, "LEARNED_PATTERN", `学習パターン確定`);
+    return { needsReply, reason: "学習パターン確定", skippedBy: "LEARNED_PATTERN" };
+  }
+
+  // ---- ③ AI判定（フィードバック+過去メール文脈付き） ----
   const feedbacks = await prisma.classificationFeedback.findMany({
     where: { userId, senderEmail: message.fromAddress },
     orderBy: { createdAt: "desc" },
-    take: 10,
+    take: 5,
   });
 
-  // ---- 4層マッチング ----
-  const matches = await findMatchingRules({
-    rules: rules as RuleWithActions[],
-    message,
-    senderCategory,
-    learnedPattern,
-    feedbacks: feedbacks.map((f) => ({
-      senderEmail: f.senderEmail,
-      correctedRuleId: f.correctedRuleId,
-    })),
+  let feedbackHint = "";
+  if (feedbacks.length > 0) {
+    const replyCount = feedbacks.filter((f) => f.correctedRuleId === "NEEDS_REPLY").length;
+    const noReplyCount = feedbacks.length - replyCount;
+    feedbackHint = `この送信者のメールについて、ユーザーは過去に${replyCount}回「返信必要」、${noReplyCount}回「返信不要」と修正しています。`;
+  }
+
+  const aiResult = await judgeNeedsReply(message, {
+    senderHistory: { subjects: senderHistory.subjects },
+    feedbackHint,
   });
 
-  if (matches.length === 0) {
-    await prisma.executedRule.create({
-      data: {
-        userId,
-        threadId: message.threadId,
-        messageId: message.id,
-        status: "SKIPPED",
-        reason: "マッチするルールなし",
-      },
-    });
-    return { matches: [], executed: false };
-  }
+  await recordResult(userId, message, aiResult.needsReply, "AI", aiResult.reason);
 
-  // マッチした各ルールのアクションを実行
-  for (const match of matches) {
-    const results = await executeActions(gmail, message, match);
-    const hasError = results.some((r) => !r.success);
+  // ---- 学習パターン更新 ----
+  await updateLearnedPattern(userId, message.fromAddress, aiResult.needsReply);
 
-    await prisma.executedRule.create({
-      data: {
-        userId,
-        ruleId: match.rule.id,
-        threadId: message.threadId,
-        messageId: message.id,
-        status: hasError ? "ERROR" : "APPLIED",
-        reason: match.reason,
-        matchType: match.matchType,
-      },
-    });
-
-    // ---- 精度改善 #2: Learned Pattern を更新 ----
-    if (match.matchType === "AI") {
-      await updateLearnedPattern(userId, message.fromAddress, match.rule.id);
-    }
-  }
-
-  return { matches, executed: true };
+  return { needsReply: aiResult.needsReply, reason: aiResult.reason, skippedBy: "AI" };
 }
 
 /**
- * 受信箱全体をスキャンして処理する
+ * 受信箱をスキャンして、返信が必要なメールだけ返す
  */
-export async function scanAndProcess(
+export async function scanAndJudge(
   gmail: GmailClient,
   userId: string,
   hours: number,
 ): Promise<{
-  total: number;
-  processed: number;
-  skipped: number;
-  errors: number;
-  learnedPatternsCreated: number;
+  pending: PendingItem[];
+  stats: { total: number; needsReply: number; skipped: number; errors: number };
 }> {
   const messages = await gmail.fetchUnrepliedMessages(hours);
-  let processed = 0;
+  const pending: PendingItem[] = [];
   let skipped = 0;
   let errors = 0;
-  let learnedPatternsCreated = 0;
 
   for (const message of messages) {
     try {
-      const existing = await prisma.executedRule.findFirst({
+      // 既に判定済みか確認
+      const existing = await prisma.judgment.findFirst({
         where: { userId, messageId: message.id },
       });
+
+      let needsReply: boolean;
+
       if (existing) {
-        skipped++;
-        continue;
+        needsReply = existing.status === "NEEDS_REPLY";
+      } else {
+        const result = await judgeMessage(userId, message);
+        needsReply = result.needsReply;
       }
 
-      const result = await processMessage(gmail, message, userId);
-      if (result.executed) {
-        processed++;
-        // 新しくconfirmedになったパターンをカウント
-        const pattern = await prisma.learnedPattern.findUnique({
-          where: { userId_senderEmail: { userId, senderEmail: message.fromAddress } },
-        });
-        if (pattern?.confirmed && pattern.hitCount === LEARNED_PATTERN_THRESHOLD) {
-          learnedPatternsCreated++;
+      if (needsReply) {
+        // 返信済みチェック（スレッド内の最新が自分なら対応済み）
+        const thread = await gmail.fetchThread(message.threadId);
+        const latest = thread[thread.length - 1];
+        const myEmail = await gmail.getMyEmail();
+        if (latest && latest.fromAddress.includes(myEmail)) {
+          skipped++;
+          continue;
         }
+
+        pending.push({
+          threadId: message.threadId,
+          messageId: message.id,
+          subject: message.subject,
+          from: message.from,
+          fromAddress: message.fromAddress,
+          date: message.date.toISOString(),
+          snippet: message.snippet,
+        });
       } else {
         skipped++;
       }
@@ -159,56 +134,58 @@ export async function scanAndProcess(
     }
   }
 
-  return { total: messages.length, processed, skipped, errors, learnedPatternsCreated };
+  return {
+    pending,
+    stats: { total: messages.length, needsReply: pending.length, skipped, errors },
+  };
 }
 
 // ============================================
-// 精度改善 #1: Classification Feedback
+// Feedback（ユーザー修正）
 // ============================================
 
-/**
- * ユーザーがAIの判定を修正した時に呼ぶ
- * → 同じ送信者の次回判定で修正結果がプロンプトに含まれる
- * → Learned Pattern もリセットされる
- */
 export async function submitFeedback(
   userId: string,
   messageId: string,
   threadId: string,
   senderEmail: string,
-  previousRuleId: string | null,
-  correctedRuleId: string,
+  needsReply: boolean,
 ) {
-  // フィードバック保存
   await prisma.classificationFeedback.create({
     data: {
       userId,
       senderEmail,
       messageId,
       threadId,
-      previousRuleId,
-      correctedRuleId,
+      previousRuleId: null,
+      correctedRuleId: needsReply ? "NEEDS_REPLY" : "NO_REPLY",
     },
   });
 
-  // Learned Pattern をリセット（間違ったパターンが確定するのを防ぐ）
+  // 学習パターンをリセット（間違ったパターンが確定するのを防ぐ）
   await prisma.learnedPattern.upsert({
     where: { userId_senderEmail: { userId, senderEmail } },
     update: {
-      ruleId: correctedRuleId,
-      hitCount: 1, // リセットして修正後のルールから再カウント
+      ruleId: needsReply ? "NEEDS_REPLY" : "NO_REPLY",
+      hitCount: 1,
       confirmed: false,
     },
     create: {
       userId,
       senderEmail,
-      ruleId: correctedRuleId,
+      ruleId: needsReply ? "NEEDS_REPLY" : "NO_REPLY",
       hitCount: 1,
       confirmed: false,
     },
   });
 
-  // 送信者カテゴリも再分析をトリガー（confidence下げる）
+  // 判定結果も更新
+  await prisma.judgment.updateMany({
+    where: { userId, messageId },
+    data: { status: needsReply ? "NEEDS_REPLY" : "SKIP", reason: "ユーザー修正" },
+  });
+
+  // 送信者カテゴリのconfidenceを下げて再分析を促す
   await prisma.senderCategory.updateMany({
     where: { userId, email: senderEmail },
     data: { confidence: 0.3 },
@@ -216,69 +193,57 @@ export async function submitFeedback(
 }
 
 // ============================================
-// 精度改善 #2: Learned Patterns
+// 内部ヘルパー
 // ============================================
 
-/**
- * AI判定が成功した時にパターンを記録
- * 同じ送信者 × 同じルールが LEARNED_PATTERN_THRESHOLD 回続いたら confirmed
- */
-async function updateLearnedPattern(
+async function recordResult(
   userId: string,
-  senderEmail: string,
-  ruleId: string,
+  message: ParsedMessage,
+  needsReply: boolean,
+  matchType: string,
+  reason: string,
 ) {
+  await prisma.judgment.create({
+    data: {
+      userId,
+      threadId: message.threadId,
+      messageId: message.id,
+      status: needsReply ? "NEEDS_REPLY" : "SKIP",
+      reason,
+      matchType: matchType as any,
+    },
+  });
+}
+
+async function updateLearnedPattern(userId: string, senderEmail: string, needsReply: boolean) {
+  const ruleId = needsReply ? "NEEDS_REPLY" : "NO_REPLY";
   const existing = await prisma.learnedPattern.findUnique({
     where: { userId_senderEmail: { userId, senderEmail } },
   });
 
   if (!existing) {
-    // 初回
-    await prisma.learnedPattern.create({
-      data: { userId, senderEmail, ruleId, hitCount: 1 },
-    });
+    await prisma.learnedPattern.create({ data: { userId, senderEmail, ruleId, hitCount: 1 } });
     return;
   }
 
   if (existing.ruleId === ruleId) {
-    // 同じルールに連続マッチ → カウントアップ
     const newCount = existing.hitCount + 1;
     await prisma.learnedPattern.update({
       where: { id: existing.id },
-      data: {
-        hitCount: newCount,
-        confirmed: newCount >= LEARNED_PATTERN_THRESHOLD,
-      },
+      data: { hitCount: newCount, confirmed: newCount >= LEARNED_PATTERN_THRESHOLD },
     });
-
     if (newCount === LEARNED_PATTERN_THRESHOLD) {
-      console.log(`[learned] パターン確定: ${senderEmail} → rule ${ruleId}`);
+      console.log(`[learned] パターン確定: ${senderEmail} → ${ruleId}`);
     }
   } else {
-    // 別のルールにマッチ → リセット
     await prisma.learnedPattern.update({
       where: { id: existing.id },
-      data: {
-        ruleId,
-        hitCount: 1,
-        confirmed: false,
-      },
+      data: { ruleId, hitCount: 1, confirmed: false },
     });
   }
 }
 
-// ============================================
-// 精度改善 #3: 送信者の過去メール履歴
-// ============================================
-
-/**
- * 送信者の過去メール（件名・スニペット）をDBにキャッシュ
- * 送信者カテゴリ分析に過去5通のコンテキストを提供
- */
-async function updateSenderHistory(
-  userId: string,
-  message: ParsedMessage,
-): Promise<{ subjects: string[]; snippets: string[]; messageCount: number }> {
+async function updateSenderHistory(userId: string, message: ParsedMessage) {
   const existing = await prisma.senderHistory.findUnique({
     where: { userId_senderEmail: { userId, senderEmail: message.fromAddress } },
   });
@@ -291,25 +256,17 @@ async function updateSenderHistory(
     subjects = JSON.parse(existing.subjects) as string[];
     snippets = JSON.parse(existing.snippets) as string[];
     messageCount = existing.messageCount;
-
-    // 最新を先頭に追加、最大5件保持
     subjects = [message.subject, ...subjects].slice(0, 5);
     snippets = [message.snippet, ...snippets].slice(0, 5);
     messageCount++;
-
     await prisma.senderHistory.update({
       where: { id: existing.id },
-      data: {
-        subjects: JSON.stringify(subjects),
-        snippets: JSON.stringify(snippets),
-        messageCount,
-      },
+      data: { subjects: JSON.stringify(subjects), snippets: JSON.stringify(snippets), messageCount },
     });
   } else {
     subjects = [message.subject];
     snippets = [message.snippet];
     messageCount = 1;
-
     await prisma.senderHistory.create({
       data: {
         userId,
@@ -324,10 +281,6 @@ async function updateSenderHistory(
   return { subjects, snippets, messageCount };
 }
 
-// ============================================
-// 送信者カテゴリ管理（過去メール文脈付き）
-// ============================================
-
 async function getOrAnalyzeSenderCategory(
   userId: string,
   message: ParsedMessage,
@@ -341,31 +294,17 @@ async function getOrAnalyzeSenderCategory(
     return { category: cached.category, confidence: cached.confidence };
   }
 
-  // 過去メール文脈を使って分析（精度改善 #3 の核心）
   const recentMessages = senderHistory.subjects.map((subj, i) => ({
     subject: subj,
     snippet: senderHistory.snippets[i] || "",
   }));
 
-  const result = await categorizeSender(
-    message.fromAddress,
-    message.from,
-    recentMessages,
-  );
+  const result = await categorizeSender(message.fromAddress, message.from, recentMessages);
 
-  // DB保存（upsertでconfidence低いキャッシュを上書き）
   await prisma.senderCategory.upsert({
     where: { userId_email: { userId, email: message.fromAddress } },
-    update: {
-      category: result.category,
-      confidence: result.confidence,
-    },
-    create: {
-      userId,
-      email: message.fromAddress,
-      category: result.category,
-      confidence: result.confidence,
-    },
+    update: { category: result.category, confidence: result.confidence },
+    create: { userId, email: message.fromAddress, category: result.category, confidence: result.confidence },
   });
 
   return { category: result.category, confidence: result.confidence };

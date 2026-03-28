@@ -1,5 +1,3 @@
-import type { ActionType, ConditionalOperator, MatchType } from "@prisma/client";
-
 /** メールのパース済みデータ */
 export interface ParsedMessage {
   id: string;
@@ -18,46 +16,20 @@ export interface ParsedMessage {
   labelIds: string[];
 }
 
-/** ルール＋アクション */
-export interface RuleWithActions {
-  id: string;
-  name: string;
-  instructions: string | null;
-  fromPattern: string | null;
-  toPattern: string | null;
-  subjectPattern: string | null;
-  bodyPattern: string | null;
-  conditionalOperator: ConditionalOperator;
-  enabled: boolean;
-  order: number;
-  runOnThreads: boolean;
-  actions: {
-    id: string;
-    type: ActionType;
-    label: string | null;
-    to: string | null;
-    content: string | null;
-    webhookUrl: string | null;
-    order: number;
-  }[];
-}
-
-/** マッチ結果 */
-export interface RuleMatch {
-  rule: RuleWithActions;
-  matchType: MatchType;
+/** 要返信判定の結果 */
+export interface NeedsReplyResult {
+  needsReply: boolean;
   reason: string;
+  skippedBy?: "SENDER_CATEGORY" | "LEARNED_PATTERN" | "AI";
 }
 
-/** ルール実行結果 */
-export interface RunRulesResult {
-  matches: RuleMatch[];
-  skippedReason?: string;
-}
-
-/** アクション実行結果 */
-export interface ActionResult {
-  type: ActionType;
-  success: boolean;
-  error?: string;
+/** 未対応メール（フロント向け） */
+export interface PendingItem {
+  threadId: string;
+  messageId: string;
+  subject: string;
+  from: string;
+  fromAddress: string;
+  date: string;
+  snippet: string;
 }

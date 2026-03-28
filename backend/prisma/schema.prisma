@@ -8,7 +8,7 @@ datasource db {
 }
 
 // ============================================
-// ユーザー・認証
+// ユーザー
 // ============================================
 model User {
   id           String   @id @default(cuid())
@@ -18,192 +18,115 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  rules         Rule[]
-  executedRules ExecutedRule[]
+  judgments        Judgment[]
   senderCategories SenderCategory[]
-  feedbacks     ClassificationFeedback[]
-  learnedPatterns LearnedPattern[]
-  senderHistories SenderHistory[]
+  feedbacks        ClassificationFeedback[]
+  learnedPatterns  LearnedPattern[]
+  senderHistories  SenderHistory[]
 }
 
 // ============================================
-// ルール定義（Inbox Zero式）
+// 判定結果（メール毎の「返信必要？」の結果）
 // ============================================
-model Rule {
-  id          String  @id @default(cuid())
-  userId      String
-  user        User    @relation(fields: [userId], references: [id])
-
-  name        String
-  instructions String? // AI判定用の自然言語指示
-
-  // 静的条件（パターンマッチ）
-  fromPattern    String? // "*.example.com" or "tanaka@*"
-  toPattern      String?
-  subjectPattern String?
-  bodyPattern    String?
-
-  // 条件の結合方法
-  conditionalOperator ConditionalOperator @default(OR)
-
-  enabled     Boolean @default(true)
-  order       Int     @default(0) // 優先度（小さい方が先）
-  runOnThreads Boolean @default(true) // スレッド内の新着にも適用
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  actions       RuleAction[]
-  executedRules ExecutedRule[]
-}
-
-enum ConditionalOperator {
-  AND
-  OR
-}
-
-// ============================================
-// ルールに紐づくアクション
-// ============================================
-model RuleAction {
-  id     String     @id @default(cuid())
-  ruleId String
-  rule   Rule       @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-
-  type   ActionType
-
-  // アクション固有パラメータ
-  label     String? // LABEL: ラベル名
-  to        String? // FORWARD: 転送先
-  content   String? // DRAFT_REPLY: テンプレート or AI指示
-  webhookUrl String? // CALL_WEBHOOK: URL
-
-  order  Int @default(0)
-}
-
-enum ActionType {
-  ARCHIVE
-  LABEL
-  MARK_READ
-  MARK_SPAM
-  DRAFT_REPLY
-  REPLY
-  FORWARD
-  CALL_WEBHOOK
-}
-
-// ============================================
-// ルール実行履歴
-// ============================================
-model ExecutedRule {
-  id        String            @id @default(cuid())
-  userId    String
-  user      User              @relation(fields: [userId], references: [id])
-  ruleId    String?
-  rule      Rule?             @relation(fields: [ruleId], references: [id])
-
-  threadId  String
-  messageId String
-  status    ExecutedRuleStatus
-  reason    String? // AIの判定理由
-  matchType MatchType? // どの層でマッチしたか
-
-  createdAt DateTime @default(now())
-}
-
-enum ExecutedRuleStatus {
-  APPLIED
-  SKIPPED
-  ERROR
-}
-
-enum MatchType {
-  STATIC    // パターンマッチ
-  LEARNED   // 送信者カテゴリから
-  AI        // AI判定
-}
-
-// ============================================
-// 送信者カテゴリ（学習パターン）
-// ============================================
-model SenderCategory {
+model Judgment {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id])
 
-  email     String   // 送信者メールアドレス
-  category  SenderCategoryType
-  confidence Float   @default(0.5) // 0-1
+  threadId  String
+  messageId String
+  status    JudgmentStatus // NEEDS_REPLY or SKIP
+  reason    String?
+  matchType MatchType?
 
-  analyzedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([userId, messageId])
+}
+
+enum JudgmentStatus {
+  NEEDS_REPLY // 返信必要
+  SKIP        // 返信不要
+}
+
+enum MatchType {
+  SENDER_CATEGORY  // 送信者カテゴリで即判定
+  LEARNED_PATTERN  // 学習パターンで即判定
+  AI               // AI判定
+}
+
+// ============================================
+// 送信者カテゴリ
+// ============================================
+model SenderCategory {
+  id         String             @id @default(cuid())
+  userId     String
+  user       User               @relation(fields: [userId], references: [id])
+  email      String
+  category   SenderCategoryType
+  confidence Float              @default(0.5)
+  analyzedAt DateTime           @default(now())
 
   @@unique([userId, email])
 }
 
 enum SenderCategoryType {
-  HUMAN           // 人からのメール
-  NEWSLETTER      // メルマガ
-  NOTIFICATION    // 自動通知
-  MARKETING       // マーケティング
-  RECEIPT         // 領収書・注文確認
-  CALENDAR        // カレンダー招待
-  COLD_EMAIL      // 営業メール
+  HUMAN
+  NEWSLETTER
+  NOTIFICATION
+  MARKETING
+  RECEIPT
+  CALENDAR
+  COLD_EMAIL
   UNKNOWN
 }
 
 // ============================================
-// 1. Classification Feedback（ユーザー修正 → 次回判定に反映）
+// Classification Feedback（ユーザー修正）
 // ============================================
 model ClassificationFeedback {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
-  senderEmail  String   // どの送信者のメールか
-  messageId    String   // 対象メッセージ
-  threadId     String
-
-  previousRuleId String? // AIが選んだルール
-  correctedRuleId String // ユーザーが正しいと指定したルール
-
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  senderEmail    String
+  messageId      String
+  threadId       String
+  previousRuleId String?
+  correctedRuleId String  // "NEEDS_REPLY" or "NO_REPLY"
+  createdAt      DateTime @default(now())
 
   @@index([userId, senderEmail])
 }
 
 // ============================================
-// 2. Learned Patterns（同じ判定が続いたらパターン保存 → AIスキップ）
+// Learned Patterns（学習パターン）
 // ============================================
 model LearnedPattern {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
-  senderEmail String  // 送信者のメールアドレス
-  ruleId      String  // 毎回マッチするルール
-  hitCount    Int     @default(1) // 連続マッチ回数
-  confirmed   Boolean @default(false) // hitCount >= 3 で true → AIスキップ
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  senderEmail String
+  ruleId      String   // "NEEDS_REPLY" or "NO_REPLY"
+  hitCount    Int      @default(1)
+  confirmed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([userId, senderEmail])
 }
 
 // ============================================
-// 3. Sender History（送信者の過去メール要約をキャッシュ）
+// Sender History（過去メール文脈キャッシュ）
 // ============================================
 model SenderHistory {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
-  senderEmail String
-  subjects    String  // 過去の件名をJSON配列で保持
-  snippets    String  // 過去のsnippetをJSON配列で保持
-  messageCount Int    @default(0)
-
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  senderEmail  String
+  subjects     String   // JSON配列
+  snippets     String   // JSON配列
+  messageCount Int      @default(0)
+  updatedAt    DateTime @updatedAt
 
   @@unique([userId, senderEmail])
 }
