@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ユーザー・認証
+// ============================================
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  accessToken  String?
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  rules         Rule[]
+  executedRules ExecutedRule[]
+  senderCategories SenderCategory[]
+}
+
+// ============================================
+// ルール定義（Inbox Zero式）
+// ============================================
+model Rule {
+  id          String  @id @default(cuid())
+  userId      String
+  user        User    @relation(fields: [userId], references: [id])
+
+  name        String
+  instructions String? // AI判定用の自然言語指示
+
+  // 静的条件（パターンマッチ）
+  fromPattern    String? // "*.example.com" or "tanaka@*"
+  toPattern      String?
+  subjectPattern String?
+  bodyPattern    String?
+
+  // 条件の結合方法
+  conditionalOperator ConditionalOperator @default(OR)
+
+  enabled     Boolean @default(true)
+  order       Int     @default(0) // 優先度（小さい方が先）
+  runOnThreads Boolean @default(true) // スレッド内の新着にも適用
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  actions       RuleAction[]
+  executedRules ExecutedRule[]
+}
+
+enum ConditionalOperator {
+  AND
+  OR
+}
+
+// ============================================
+// ルールに紐づくアクション
+// ============================================
+model RuleAction {
+  id     String     @id @default(cuid())
+  ruleId String
+  rule   Rule       @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  type   ActionType
+
+  // アクション固有パラメータ
+  label     String? // LABEL: ラベル名
+  to        String? // FORWARD: 転送先
+  content   String? // DRAFT_REPLY: テンプレート or AI指示
+  webhookUrl String? // CALL_WEBHOOK: URL
+
+  order  Int @default(0)
+}
+
+enum ActionType {
+  ARCHIVE
+  LABEL
+  MARK_READ
+  MARK_SPAM
+  DRAFT_REPLY
+  REPLY
+  FORWARD
+  CALL_WEBHOOK
+}
+
+// ============================================
+// ルール実行履歴
+// ============================================
+model ExecutedRule {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id])
+  ruleId    String?
+  rule      Rule?             @relation(fields: [ruleId], references: [id])
+
+  threadId  String
+  messageId String
+  status    ExecutedRuleStatus
+  reason    String? // AIの判定理由
+  matchType MatchType? // どの層でマッチしたか
+
+  createdAt DateTime @default(now())
+}
+
+enum ExecutedRuleStatus {
+  APPLIED
+  SKIPPED
+  ERROR
+}
+
+enum MatchType {
+  STATIC    // パターンマッチ
+  LEARNED   // 送信者カテゴリから
+  AI        // AI判定
+}
+
+// ============================================
+// 送信者カテゴリ（学習パターン）
+// ============================================
+model SenderCategory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  email     String   // 送信者メールアドレス
+  category  SenderCategoryType
+  confidence Float   @default(0.5) // 0-1
+
+  analyzedAt DateTime @default(now())
+
+  @@unique([userId, email])
+}
+
+enum SenderCategoryType {
+  HUMAN           // 人からのメール
+  NEWSLETTER      // メルマガ
+  NOTIFICATION    // 自動通知
+  MARKETING       // マーケティング
+  RECEIPT         // 領収書・注文確認
+  CALENDAR        // カレンダー招待
+  COLD_EMAIL      // 営業メール
+  UNKNOWN
+}
