@@ -27,10 +27,12 @@ function formatDate(dateStr) {
   return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-function urgencyLevel(dateStr) {
+function urgencyLevel(dateStr, priority) {
   const hours = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60);
-  if (hours > 48) return "urgent";
-  if (hours > 24) return "warning";
+  // 優先度が高いと早めに至急になる
+  if (priority >= 5 || hours > 48) return "urgent";
+  if (priority >= 4 || hours > 24) return "warning";
+  if (priority <= 1) return "low";
   return "normal";
 }
 
@@ -38,6 +40,15 @@ const STATUS_CONFIG = {
   urgent: { label: "至急", bg: "#fde8e8", color: "#c53030", border: "#feb2b2" },
   warning: { label: "要注意", bg: "#fef6e7", color: "#c05621", border: "#fbd38d" },
   normal: { label: "未対応", bg: "#e8f4f8", color: "#2b6cb0", border: "#90cdf4" },
+  low: { label: "低", bg: "#f5f5f4", color: "#888", border: "#e5e5e3" },
+};
+
+const PRIORITY_LABELS = {
+  5: { label: "最優先", bg: "#fde8e8", color: "#c53030" },
+  4: { label: "高", bg: "#fef6e7", color: "#c05621" },
+  3: { label: "中", bg: "#e8f4f8", color: "#2b6cb0" },
+  2: { label: "低", bg: "#f0fdf4", color: "#16a34a" },
+  1: { label: "低", bg: "#f5f5f4", color: "#888" },
 };
 
 export default function App() {
@@ -52,22 +63,33 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [sortKey, setSortKey] = useState("elapsed");
+  const [activeTab, setActiveTab] = useState("pending");
+  const [awaitingItems, setAwaitingItems] = useState([]);
 
   function loadItems() {
     if (!GAS_URL) {
       setItems([
-        { threadId: "1", messageId: "m1", subject: "設立の件で相談", summary: "定款3点の確認と打合せ日程の調整", snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
-        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", summary: "見積もり32万円の確認を求めている", snippet: "山田不動産の山田です。\n\nご依頼いただいた登記費用の見積書を添付いたします。\n\n【内訳】\n・登録免許税: 150,000円\n・司法書士報酬: 80,000円\n・定款認証費用: 52,000円\n・印紙代: 40,000円\n合計: 322,000円（税込）\n\nご確認の上、ご不明点がございましたらお知らせください。\n見積有効期限は今月末までとなります。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
-        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", summary: "必要書類の準備と来店予約の連絡待ち", snippet: "〇〇銀行 法人営業部でございます。\n\n法人口座開設に必要な書類をご案内いたします。\n\n【必要書類】\n① 登記簿謄本（発行から3ヶ月以内）\n② 印鑑証明書（発行から3ヶ月以内）\n③ 代表者の本人確認書類（運転免許証等）\n④ 会社の実印\n⑤ 届出印（銀行届出用）\n\nご準備でき次第、最寄りの支店窓口までお越しください。\n事前にご予約いただけるとスムーズです。\n\n何かご不明な点がございましたらお気軽にお問い合わせください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
-        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", summary: "3候補から希望日時の返答を求めている", snippet: "公証役場の佐々木です。\n\n定款認証の予約日程について候補をお送りします。\n\n【候補日時】\n・4月3日（木）14:00〜\n・4月5日（土）10:00〜\n・4月8日（火）15:30〜\n\nいずれかでご都合はいかがでしょうか。\n所要時間は約30分〜1時間を見込んでおります。\n\n当日は以下をお持ちください。\n・定款3通\n・発起人全員の印鑑証明書\n・身分証明書\n\nご返信お待ちしております。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
-        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", summary: "契約書3箇所の修正案への確認待ち", snippet: "佐藤法律事務所の佐藤です。\n\n契約書のドラフトを確認いたしました。\n以下の点について修正が必要と考えます。\n\n【修正箇所】\n■ 第3条（支払条件）\n現行: 「納品後30日以内」\n修正案: 「検収完了後30日以内」に変更を推奨します。\n\n■ 第7条（免責事項）\n天災等の不可抗力条項が不十分です。\n具体的な事由の列挙を追加すべきです。\n\n■ 第12条（契約解除）\n解除通知の方法について、書面に限定することを推奨します。\n\n修正案を別途お送りしますので、ご確認をお願いいたします。", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
+        { threadId: "1", messageId: "m1", subject: "設立の件で相談", summary: "定款3点の確認と打合せ日程の調整", priority: 3, snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
+        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", summary: "見積もり32万円の確認を求めている", priority: 4, snippet: "山田不動産の山田です。\n\nご依頼いただいた登記費用の見積書を添付いたします。\n\n【内訳】\n・登録免許税: 150,000円\n・司法書士報酬: 80,000円\n・定款認証費用: 52,000円\n・印紙代: 40,000円\n合計: 322,000円（税込）\n\nご確認の上、ご不明点がございましたらお知らせください。\n見積有効期限は今月末までとなります。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
+        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", summary: "必要書類の準備と来店予約の連絡待ち", priority: 3, snippet: "〇〇銀行 法人営業部でございます。\n\n法人口座開設に必要な書類をご案内いたします。\n\n【必要書類】\n① 登記簿謄本（発行から3ヶ月以内）\n② 印鑑証明書（発行から3ヶ月以内）\n③ 代表者の本人確認書類（運転免許証等）\n④ 会社の実印\n⑤ 届出印（銀行届出用）\n\nご準備でき次第、最寄りの支店窓口までお越しください。\n事前にご予約いただけるとスムーズです。\n\n何かご不明な点がございましたらお気軽にお問い合わせください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
+        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", summary: "3候補から希望日時の返答を求めている", priority: 5, snippet: "公証役場の佐々木です。\n\n定款認証の予約日程について候補をお送りします。\n\n【候補日時】\n・4月3日（木）14:00〜\n・4月5日（土）10:00〜\n・4月8日（火）15:30〜\n\nいずれかでご都合はいかがでしょうか。\n所要時間は約30分〜1時間を見込んでおります。\n\n当日は以下をお持ちください。\n・定款3通\n・発起人全員の印鑑証明書\n・身分証明書\n\nご返信お待ちしております。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
+        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", summary: "契約書3箇所の修正案への確認待ち", priority: 4, snippet: "佐藤法律事務所の佐藤です。\n\n契約書のドラフトを確認いたしました。\n以下の点について修正が必要と考えます。\n\n【修正箇所】\n■ 第3条（支払条件）\n現行: 「納品後30日以内」\n修正案: 「検収完了後30日以内」に変更を推奨します。\n\n■ 第7条（免責事項）\n天災等の不可抗力条項が不十分です。\n具体的な事由の列挙を追加すべきです。\n\n■ 第12条（契約解除）\n解除通知の方法について、書面に限定することを推奨します。\n\n修正案を別途お送りしますので、ご確認をお願いいたします。", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
+      ]);
+      setAwaitingItems([
+        { threadId: "a1", subject: "請求書を送付しました", summary: "請求書の確認・処理を待っている", to: "経理部 <keiri@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(), type: "awaiting_reply" },
+        { threadId: "a2", subject: "ミーティング議事録の共有", summary: "議事録の内容確認を依頼した", to: "チームメンバー <team@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 50).toISOString(), type: "awaiting_reply" },
+        { threadId: "a3", subject: "見積もり依頼の件", summary: "見積もりの作成・送付を依頼した", to: "取引先 <vendor@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 75).toISOString(), type: "awaiting_reply" },
       ]);
       return;
     }
     setRefreshing(true);
     fetch(GAS_URL)
       .then((r) => r.json())
-      .then((data) => { setItems(data.pending || data); setError(null); })
+      .then((data) => {
+        setItems(data.pending || data);
+        setAwaitingItems(data.awaiting || []);
+        setError(null);
+      })
       .catch(() => setError("取得できませんでした"))
       .finally(() => setRefreshing(false));
   }
@@ -147,17 +169,18 @@ export default function App() {
   }
 
   const visibleItems = items?.filter((i) => !dismissed[i.threadId]) || [];
-  const urgentCount = visibleItems.filter((i) => urgencyLevel(i.date) === "urgent").length;
-  const warningCount = visibleItems.filter((i) => urgencyLevel(i.date) === "warning").length;
+  const urgentCount = visibleItems.filter((i) => urgencyLevel(i.date, i.priority) === "urgent").length;
+  const warningCount = visibleItems.filter((i) => urgencyLevel(i.date, i.priority) === "warning").length;
 
   // タブタイトルに件数バッジ
   useEffect(() => {
-    const count = visibleItems.length;
-    document.title = count > 0 ? `(${count}) そのメール対応した？` : "そのメール対応した？";
-  }, [visibleItems.length]);
+    const total = visibleItems.length + awaitingItems.length;
+    document.title = total > 0 ? `(${total}) そのメール対応した？` : "そのメール対応した？";
+  }, [visibleItems.length, awaitingItems.length]);
 
   // ソート
   const sortedItems = [...visibleItems].sort((a, b) => {
+    if (sortKey === "priority") return (b.priority || 3) - (a.priority || 3); // 優先度高い順
     if (sortKey === "elapsed") return new Date(a.date) - new Date(b.date); // 古い順（経過長い順）
     if (sortKey === "date") return new Date(b.date) - new Date(a.date); // 新しい順
     if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
@@ -240,14 +263,31 @@ export default function App() {
       {/* ===== メインコンテンツ ===== */}
       <div style={{ padding: "24px 24px 80px", maxWidth: 1000, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a" }}>未対応メール</h2>
-            {items && (
-              <span style={{ fontSize: 13, color: "#999" }}>{visibleItems.length}件</span>
-            )}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button
+              onClick={() => setActiveTab("pending")}
+              style={{
+                fontSize: 16, fontWeight: activeTab === "pending" ? 700 : 500, padding: "6px 14px",
+                border: "none", borderBottom: activeTab === "pending" ? "2px solid #7c5cfc" : "2px solid transparent",
+                background: "none", cursor: "pointer", color: activeTab === "pending" ? "#1a1a1a" : "#999",
+              }}
+            >
+              未対応 {items ? <span style={{ fontSize: 12, fontWeight: 600, color: activeTab === "pending" ? "#7c5cfc" : "#ccc" }}>{visibleItems.length}</span> : null}
+            </button>
+            <button
+              onClick={() => setActiveTab("awaiting")}
+              style={{
+                fontSize: 16, fontWeight: activeTab === "awaiting" ? 700 : 500, padding: "6px 14px",
+                border: "none", borderBottom: activeTab === "awaiting" ? "2px solid #7c5cfc" : "2px solid transparent",
+                background: "none", cursor: "pointer", color: activeTab === "awaiting" ? "#1a1a1a" : "#999",
+              }}
+            >
+              返信待ち {awaitingItems.length > 0 ? <span style={{ fontSize: 12, fontWeight: 600, color: activeTab === "awaiting" ? "#7c5cfc" : "#ccc" }}>{awaitingItems.length}</span> : null}
+            </button>
           </div>
           <div style={{ display: "flex", gap: 4, fontSize: 11 }}>
             {[
+              { key: "priority", label: "優先度順" },
               { key: "elapsed", label: "経過順" },
               { key: "date", label: "新しい順" },
               { key: "sender", label: "送信者順" },
@@ -325,8 +365,8 @@ export default function App() {
           </div>
         )}
 
-        {/* ===== テーブル ===== */}
-        <div style={{
+        {/* ===== 未対応テーブル ===== */}
+        {activeTab === "pending" && <div style={{
           background: "#fff",
           borderRadius: 8,
           border: "1px solid #e5e5e3",
@@ -369,7 +409,7 @@ export default function App() {
           )}
 
           {sortedItems.map((item, i) => {
-            const level = urgencyLevel(item.date);
+            const level = urgencyLevel(item.date, item.priority);
             const status = STATUS_CONFIG[level];
             const isDismissing = dismissed[item.threadId];
             const isExpanded = expandedId === item.threadId;
@@ -416,14 +456,24 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* ステータス */}
-                <div style={{ padding: "10px 12px", display: "flex", alignItems: "center" }}>
+                {/* ステータス + 優先度 */}
+                <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{
                     fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 4,
                     background: status.bg, color: status.color, border: `1px solid ${status.border}`, whiteSpace: "nowrap",
                   }}>
                     {status.label}
                   </span>
+                  {item.priority && PRIORITY_LABELS[item.priority] && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 3,
+                      background: PRIORITY_LABELS[item.priority].bg,
+                      color: PRIORITY_LABELS[item.priority].color,
+                      whiteSpace: "nowrap",
+                    }}>
+                      P{item.priority}
+                    </span>
+                  )}
                 </div>
 
                 {/* 送信者 */}
@@ -503,7 +553,98 @@ export default function App() {
               {visibleItems.length}件表示中
             </div>
           )}
-        </div>
+        </div>}
+
+        {/* ===== 返信待ちテーブル ===== */}
+        {activeTab === "awaiting" && <div style={{
+          background: "#fff",
+          borderRadius: 8,
+          border: "1px solid #e5e5e3",
+          overflow: "hidden",
+        }}>
+          {/* ヘッダー */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
+            borderBottom: "1px solid #e5e5e3",
+            background: "#fafaf9",
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#888",
+            textTransform: "uppercase",
+            letterSpacing: "0.04em",
+          }}>
+            <div style={{ padding: "8px 16px" }}>件名</div>
+            <div style={{ padding: "8px 12px" }}>送信先</div>
+            <div style={{ padding: "8px 12px" }}>送信日時</div>
+            <div style={{ padding: "8px 12px" }}>経過</div>
+          </div>
+
+          {awaitingItems.length === 0 && (
+            <div style={{ padding: "64px 16px", textAlign: "center", color: "#bbb" }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>0</div>
+              <div style={{ fontSize: 13 }}>返信待ちなし</div>
+            </div>
+          )}
+
+          {awaitingItems.map((item, i) => {
+            const level = urgencyLevel(item.date, item.priority);
+            const status = STATUS_CONFIG[level];
+
+            return (
+              <div
+                key={item.threadId}
+                className="table-row"
+                onClick={() => setExpandedId(expandedId === item.threadId ? null : item.threadId)}
+                style={{
+                  borderBottom: i < awaitingItems.length - 1 ? "1px solid #f0f0ee" : "none",
+                  animation: `fadeIn 0.2s ease ${i * 0.03}s both`,
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
+                }}>
+                  {/* 件名 + AI要約 */}
+                  <div style={{ padding: "10px 16px", minWidth: 0 }}>
+                    <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                      {item.subject}
+                    </span>
+                    {item.summary && (
+                      <span style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                        {item.summary}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 送信先 */}
+                  <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <span style={{ fontSize: 12, color: "#555", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {item.to ? extractName(item.to) : ""}
+                    </span>
+                  </div>
+
+                  {/* 送信日時 */}
+                  <div style={{ padding: "10px 12px", fontSize: 12, color: "#888", display: "flex", alignItems: "center" }}>
+                    {formatDate(item.date)}
+                  </div>
+
+                  {/* 経過 */}
+                  <div style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
+                    {timeAgo(item.date)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {awaitingItems.length > 0 && (
+            <div style={{ padding: "8px 16px", fontSize: 12, color: "#bbb", borderTop: "1px solid #f0f0ee" }}>
+              {awaitingItems.length}件表示中
+            </div>
+          )}
+        </div>}
       </div>
 
       {/* ===== Undoトースト ===== */}
