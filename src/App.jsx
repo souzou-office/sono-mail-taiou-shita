@@ -45,6 +45,8 @@ export default function App() {
   const [error, setError] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
   const [dismissed, setDismissed] = useState({});
+  const [undoItem, setUndoItem] = useState(null);
+  const [undoTimer, setUndoTimer] = useState(null);
 
   useEffect(() => {
     if (!GAS_URL) {
@@ -64,7 +66,25 @@ export default function App() {
   }, []);
 
   function handleDismiss(item) {
+    // 前のundoタイマーがあれば確定させる
+    if (undoTimer) {
+      clearTimeout(undoTimer);
+      confirmDismiss();
+    }
+
     setDismissed((prev) => ({ ...prev, [item.threadId]: true }));
+    setUndoItem(item);
+
+    // 5秒後に確定（API送信）
+    const timer = setTimeout(() => {
+      confirmDismiss(item);
+    }, 5000);
+    setUndoTimer(timer);
+  }
+
+  function confirmDismiss(item) {
+    const target = item || undoItem;
+    if (!target) return;
 
     if (API_URL) {
       fetch(`${API_URL}/feedback`, {
@@ -72,19 +92,26 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: "demo",
-          messageId: item.messageId,
-          threadId: item.threadId,
-          senderEmail: extractEmail(item.from),
+          messageId: target.messageId,
+          threadId: target.threadId,
+          senderEmail: extractEmail(target.from),
           needsReply: false,
         }),
       }).catch(() => {});
     }
 
-    // 500ms後にリストから消す
-    setTimeout(() => {
-      setItems((prev) => prev.filter((it) => it.threadId !== item.threadId));
-      setDismissed((prev) => { const next = { ...prev }; delete next[item.threadId]; return next; });
-    }, 500);
+    setItems((prev) => prev ? prev.filter((it) => it.threadId !== target.threadId) : prev);
+    setDismissed((prev) => { const next = { ...prev }; delete next[target.threadId]; return next; });
+    setUndoItem(null);
+    setUndoTimer(null);
+  }
+
+  function handleUndo() {
+    if (!undoItem) return;
+    if (undoTimer) clearTimeout(undoTimer);
+    setDismissed((prev) => { const next = { ...prev }; delete next[undoItem.threadId]; return next; });
+    setUndoItem(null);
+    setUndoTimer(null);
   }
 
   const visibleItems = items?.filter((i) => !dismissed[i.threadId]) || [];
@@ -101,7 +128,10 @@ export default function App() {
         .open-btn, .dismiss-btn { opacity: 0; transition: opacity 0.15s; }
         .table-row:hover .open-btn, .table-row:hover .dismiss-btn { opacity: 1; }
         .dismiss-btn:hover { background: #fee2e2 !important; color: #b91c1c !important; }
+        .undo-toast { animation: slideUp 0.2s ease; }
+        .undo-btn:hover { background: #4338ca !important; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
       {/* ===== 白ヘッダー ===== */}
@@ -284,6 +314,46 @@ export default function App() {
           )}
         </div>
       </div>
+
+      {/* ===== Undoトースト ===== */}
+      {undoItem && (
+        <div className="undo-toast" style={{
+          position: "fixed",
+          bottom: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#1a1a1a",
+          color: "#fff",
+          borderRadius: 8,
+          padding: "10px 16px",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          fontSize: 13,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+          zIndex: 100,
+        }}>
+          <span>
+            「{undoItem.subject.length > 20 ? undoItem.subject.substring(0, 20) + "..." : undoItem.subject}」を返信不要にしました
+          </span>
+          <button
+            className="undo-btn"
+            onClick={handleUndo}
+            style={{
+              background: "#5b21b6",
+              color: "#fff",
+              border: "none",
+              borderRadius: 4,
+              padding: "4px 12px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            取り消す
+          </button>
+        </div>
+      )}
     </>
   );
 }
