@@ -44,6 +44,14 @@ const STATUS_CONFIG = {
   replied: { label: "返信済", bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0" },
 };
 
+const MOOD_CONFIG = {
+  urgent: { label: "急ぎ", color: "#c53030", bg: "#fde8e8" },
+  frustrated: { label: "不満", color: "#9b2c2c", bg: "#fde8e8" },
+  formal: { label: "丁寧", color: "#2b6cb0", bg: "#e8f4f8" },
+  friendly: { label: "親しみ", color: "#16a34a", bg: "#f0fdf4" },
+  calm: { label: "平常", color: "#888", bg: "#f5f5f4" },
+};
+
 const PRIORITY_LABELS = {
   5: { label: "最優先", bg: "#fde8e8", color: "#c53030" },
   4: { label: "高", bg: "#fef6e7", color: "#c05621" },
@@ -70,11 +78,11 @@ export default function App() {
   function loadItems() {
     if (!GAS_URL) {
       setItems([
-        { threadId: "1", messageId: "m1", subject: "設立の件で相談", summary: "定款3点の確認と打合せ日程の調整", priority: 3, replied: true, snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
-        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", summary: "見積もり32万円の確認を求めている", priority: 4, snippet: "山田不動産の山田です。\n\nご依頼いただいた登記費用の見積書を添付いたします。\n\n【内訳】\n・登録免許税: 150,000円\n・司法書士報酬: 80,000円\n・定款認証費用: 52,000円\n・印紙代: 40,000円\n合計: 322,000円（税込）\n\nご確認の上、ご不明点がございましたらお知らせください。\n見積有効期限は今月末までとなります。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
-        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", summary: "必要書類の準備と来店予約の連絡待ち", priority: 3, snippet: "〇〇銀行 法人営業部でございます。\n\n法人口座開設に必要な書類をご案内いたします。\n\n【必要書類】\n① 登記簿謄本（発行から3ヶ月以内）\n② 印鑑証明書（発行から3ヶ月以内）\n③ 代表者の本人確認書類（運転免許証等）\n④ 会社の実印\n⑤ 届出印（銀行届出用）\n\nご準備でき次第、最寄りの支店窓口までお越しください。\n事前にご予約いただけるとスムーズです。\n\n何かご不明な点がございましたらお気軽にお問い合わせください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
-        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", summary: "3候補から希望日時の返答を求めている", priority: 5, snippet: "公証役場の佐々木です。\n\n定款認証の予約日程について候補をお送りします。\n\n【候補日時】\n・4月3日（木）14:00〜\n・4月5日（土）10:00〜\n・4月8日（火）15:30〜\n\nいずれかでご都合はいかがでしょうか。\n所要時間は約30分〜1時間を見込んでおります。\n\n当日は以下をお持ちください。\n・定款3通\n・発起人全員の印鑑証明書\n・身分証明書\n\nご返信お待ちしております。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
-        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", summary: "契約書3箇所の修正案への確認待ち", priority: 4, snippet: "佐藤法律事務所の佐藤です。\n\n契約書のドラフトを確認いたしました。\n以下の点について修正が必要と考えます。\n\n【修正箇所】\n■ 第3条（支払条件）\n現行: 「納品後30日以内」\n修正案: 「検収完了後30日以内」に変更を推奨します。\n\n■ 第7条（免責事項）\n天災等の不可抗力条項が不十分です。\n具体的な事由の列挙を追加すべきです。\n\n■ 第12条（契約解除）\n解除通知の方法について、書面に限定することを推奨します。\n\n修正案を別途お送りしますので、ご確認をお願いいたします。", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
+        { threadId: "1", messageId: "m1", subject: "設立の件で相談", summary: "定款3点の確認と打合せ日程の調整", action: "来週火曜か水曜で打合せ日程を返信", deadline: "来週中", priority: 3, mood: "friendly", replied: true, snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
+        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", summary: "見積もり32万円の確認を求めている", action: "見積書を確認して不明点があれば質問", deadline: "今月末", priority: 4, mood: "formal", snippet: "山田不動産の山田です。\n\nご依頼いただいた登記費用の見積書を添付いたします。\n\n【内訳】\n・登録免許税: 150,000円\n・司法書士報酬: 80,000円\n・定款認証費用: 52,000円\n・印紙代: 40,000円\n合計: 322,000円（税込）\n\nご確認の上、ご不明点がございましたらお知らせください。\n見積有効期限は今月末までとなります。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
+        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", summary: "必要書類の準備と来店予約の連絡待ち", action: "書類5点を準備して支店に予約連絡", deadline: null, priority: 3, mood: "calm", snippet: "〇〇銀行 法人営業部でございます。\n\n法人口座開設に必要な書類をご案内いたします。\n\n【必要書類】\n① 登記簿謄本（発行から3ヶ月以内）\n② 印鑑証明書（発行から3ヶ月以内）\n③ 代表者の本人確認書類（運転免許証等）\n④ 会社の実印\n⑤ 届出印（銀行届出用）\n\nご準備でき次第、最寄りの支店窓口までお越しください。\n事前にご予約いただけるとスムーズです。\n\n何かご不明な点がございましたらお気軽にお問い合わせください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
+        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", summary: "3候補から希望日時の返答を求めている", action: "4/3, 4/5, 4/8のいずれかで希望日を返信", deadline: "早めに", priority: 5, mood: "urgent", snippet: "公証役場の佐々木です。\n\n定款認証の予約日程について候補をお送りします。\n\n【候補日時】\n・4月3日（木）14:00〜\n・4月5日（土）10:00〜\n・4月8日（火）15:30〜\n\nいずれかでご都合はいかがでしょうか。\n所要時間は約30分〜1時間を見込んでおります。\n\n当日は以下をお持ちください。\n・定款3通\n・発起人全員の印鑑証明書\n・身分証明書\n\nご返信お待ちしております。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
+        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", summary: "契約書3箇所の修正案への確認待ち", action: "第3条・第7条・第12条の修正案を確認して返信", deadline: null, priority: 4, mood: "formal", snippet: "佐藤法律事務所の佐藤です。\n\n契約書のドラフトを確認いたしました。\n以下の点について修正が必要と考えます。\n\n【修正箇所】\n■ 第3条（支払条件）\n現行: 「納品後30日以内」\n修正案: 「検収完了後30日以内」に変更を推奨します。\n\n■ 第7条（免責事項）\n天災等の不可抗力条項が不十分です。\n具体的な事由の列挙を追加すべきです。\n\n■ 第12条（契約解除）\n解除通知の方法について、書面に限定することを推奨します。\n\n修正案を別途お送りしますので、ご確認をお願いいたします。", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
       ]);
       setAwaitingItems([
         { threadId: "a1", subject: "請求書を送付しました", summary: "請求書の確認・処理を待っている", to: "経理部 <keiri@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(), type: "awaiting_reply" },
@@ -476,6 +484,16 @@ export default function App() {
                       P{item.priority}
                     </span>
                   )}
+                  {item.mood && MOOD_CONFIG[item.mood] && item.mood !== "calm" && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 500, padding: "1px 5px", borderRadius: 3,
+                      background: MOOD_CONFIG[item.mood].bg,
+                      color: MOOD_CONFIG[item.mood].color,
+                      whiteSpace: "nowrap",
+                    }}>
+                      {MOOD_CONFIG[item.mood].label}
+                    </span>
+                  )}
                 </div>
 
                 {/* 送信者 */}
@@ -534,16 +552,41 @@ export default function App() {
                 </div>
               </div>
 
-              {/* メール本文プレビュー */}
-              {isExpanded && item.snippet && (
+              {/* アクションアイテム + メール本文プレビュー */}
+              {isExpanded && (
                 <div style={{
-                  padding: "0 16px 12px 16px", fontSize: 12, color: "#555",
-                  lineHeight: 1.7, animation: "fadeIn 0.15s ease",
-                  maxHeight: 300, overflowY: "auto",
-                  whiteSpace: "pre-wrap", wordBreak: "break-word",
-                  borderTop: "1px solid #f0f0ee", paddingTop: 10, marginTop: 2,
+                  borderTop: "1px solid #f0f0ee", marginTop: 2,
+                  animation: "fadeIn 0.15s ease",
                 }}>
-                  {item.snippet}
+                  {/* アクションアイテムカード */}
+                  {item.action && (
+                    <div style={{
+                      margin: "10px 16px 0", padding: "8px 12px",
+                      background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6,
+                      fontSize: 12, display: "flex", gap: 8, alignItems: "flex-start",
+                    }}>
+                      <span style={{ fontWeight: 700, color: "#b45309", flexShrink: 0 }}>TODO</span>
+                      <div>
+                        <span style={{ color: "#92400e" }}>{item.action}</span>
+                        {item.deadline && (
+                          <span style={{ marginLeft: 8, fontSize: 11, color: "#c53030", fontWeight: 600 }}>
+                            期限: {item.deadline}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 本文 */}
+                  {item.snippet && (
+                    <div style={{
+                      padding: "10px 16px 12px", fontSize: 12, color: "#555",
+                      lineHeight: 1.7, maxHeight: 300, overflowY: "auto",
+                      whiteSpace: "pre-wrap", wordBreak: "break-word",
+                    }}>
+                      {item.snippet}
+                    </div>
+                  )}
                 </div>
               )}
               </div>

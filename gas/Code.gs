@@ -139,30 +139,41 @@ ${details}`;
       snippet: remaining[i].snippet,
     }));
 
-  // --- 3段目: AI要約 + 優先度スコアリング ---
+  // --- 3段目: AI分析（要約・優先度・アクションアイテム・感情） ---
   if (actionItems.length > 0) {
     const summaryInput = actionItems.map((m, i) =>
       `${i}: [${m.subject}] from: ${m.from}\n${m.snippet.substring(0, 500)}`
     ).join("\n---\n");
 
-    const summaryPrompt = `各メールについて以下をJSON配列で返して。
-各要素は {"summary": "要点を1行30文字以内", "priority": 1〜5} の形式。
+    const analysisPrompt = `各メールを分析してJSON配列で返して。
+各要素は以下の形式:
+{
+  "summary": "要点を1行30文字以内",
+  "action": "具体的にやるべきこと（例: 見積書を確認して承認可否を返信）。不要ならnull",
+  "deadline": "期限があれば記載（例: 今週金曜）。なければnull",
+  "priority": 1〜5の数値,
+  "mood": "相手の感情（calm/urgent/frustrated/formal/friendly）"
+}
+
 priorityの基準:
-5=今すぐ対応（期限切れ・緊急の依頼）
-4=早めに対応（明確な質問・見積もり依頼）
+5=今すぐ対応（期限切れ・怒っている・緊急）
+4=早めに対応（明確な質問・見積もり・期限あり）
 3=普通（確認依頼・日程調整）
-2=急がない（参考情報の共有・軽い相談）
+2=急がない（参考情報・軽い相談）
 1=ほぼ不要（CC共有・FYI）
 
 ${summaryInput}`;
 
-    const summaryResult = callHaiku(summaryPrompt);
-    const parsed = parseJsonArrayOfObjects(summaryResult);
+    const analysisResult = callHaiku(analysisPrompt);
+    const parsed = parseJsonArrayOfObjects(analysisResult);
 
     for (let i = 0; i < actionItems.length; i++) {
       if (parsed[i]) {
         actionItems[i].summary = parsed[i].summary || "";
+        actionItems[i].action = parsed[i].action || null;
+        actionItems[i].deadline = parsed[i].deadline || null;
         actionItems[i].priority = parsed[i].priority || 3;
+        actionItems[i].mood = parsed[i].mood || "calm";
       }
     }
   }
