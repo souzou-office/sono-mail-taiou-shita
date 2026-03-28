@@ -24,27 +24,31 @@ function doGet(e) {
   return output;
 }
 
-// 軽量な返信済みチェック（AI判定なし、返信済みだけ消す）
+// 軽量な返信済みチェック（消さずに replied フラグを立てる）
 function quickReplyCheck() {
   const items = getStoredItems();
   if (items.length === 0) return;
 
-  const stillNeeded = [];
+  let changed = false;
   for (const item of items) {
     try {
       const thread = GmailApp.getThreadById(item.threadId);
       if (!thread) continue;
       const messages = thread.getMessages();
       const latest = messages[messages.length - 1];
-      if (latest.getFrom().includes(MY_EMAIL)) continue; // 返信済み → 消す
-      stillNeeded.push(item);
+      const wasReplied = item.replied || false;
+      const isReplied = latest.getFrom().includes(MY_EMAIL);
+      if (isReplied !== wasReplied) {
+        item.replied = isReplied;
+        changed = true;
+      }
     } catch (e) {
-      stillNeeded.push(item); // エラー時は残す
+      // エラー時はそのまま
     }
   }
 
-  if (stillNeeded.length !== items.length) {
-    saveItems(stillNeeded);
+  if (changed) {
+    saveItems(items);
   }
 }
 

@@ -41,6 +41,7 @@ const STATUS_CONFIG = {
   warning: { label: "要注意", bg: "#fef6e7", color: "#c05621", border: "#fbd38d" },
   normal: { label: "未対応", bg: "#e8f4f8", color: "#2b6cb0", border: "#90cdf4" },
   low: { label: "低", bg: "#f5f5f4", color: "#888", border: "#e5e5e3" },
+  replied: { label: "返信済", bg: "#f0fdf4", color: "#16a34a", border: "#bbf7d0" },
 };
 
 const PRIORITY_LABELS = {
@@ -69,7 +70,7 @@ export default function App() {
   function loadItems() {
     if (!GAS_URL) {
       setItems([
-        { threadId: "1", messageId: "m1", subject: "設立の件で相談", summary: "定款3点の確認と打合せ日程の調整", priority: 3, snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
+        { threadId: "1", messageId: "m1", subject: "設立の件で相談", summary: "定款3点の確認と打合せ日程の調整", priority: 3, replied: true, snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
         { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", summary: "見積もり32万円の確認を求めている", priority: 4, snippet: "山田不動産の山田です。\n\nご依頼いただいた登記費用の見積書を添付いたします。\n\n【内訳】\n・登録免許税: 150,000円\n・司法書士報酬: 80,000円\n・定款認証費用: 52,000円\n・印紙代: 40,000円\n合計: 322,000円（税込）\n\nご確認の上、ご不明点がございましたらお知らせください。\n見積有効期限は今月末までとなります。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
         { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", summary: "必要書類の準備と来店予約の連絡待ち", priority: 3, snippet: "〇〇銀行 法人営業部でございます。\n\n法人口座開設に必要な書類をご案内いたします。\n\n【必要書類】\n① 登記簿謄本（発行から3ヶ月以内）\n② 印鑑証明書（発行から3ヶ月以内）\n③ 代表者の本人確認書類（運転免許証等）\n④ 会社の実印\n⑤ 届出印（銀行届出用）\n\nご準備でき次第、最寄りの支店窓口までお越しください。\n事前にご予約いただけるとスムーズです。\n\n何かご不明な点がございましたらお気軽にお問い合わせください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
         { threadId: "4", messageId: "m4", subject: "定款認証の日程について", summary: "3候補から希望日時の返答を求めている", priority: 5, snippet: "公証役場の佐々木です。\n\n定款認証の予約日程について候補をお送りします。\n\n【候補日時】\n・4月3日（木）14:00〜\n・4月5日（土）10:00〜\n・4月8日（火）15:30〜\n\nいずれかでご都合はいかがでしょうか。\n所要時間は約30分〜1時間を見込んでおります。\n\n当日は以下をお持ちください。\n・定款3通\n・発起人全員の印鑑証明書\n・身分証明書\n\nご返信お待ちしております。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
@@ -178,11 +179,12 @@ export default function App() {
     document.title = total > 0 ? `(${total}) そのメール対応した？` : "そのメール対応した？";
   }, [visibleItems.length, awaitingItems.length]);
 
-  // ソート
+  // ソート（返信済みは常に下）
   const sortedItems = [...visibleItems].sort((a, b) => {
-    if (sortKey === "priority") return (b.priority || 3) - (a.priority || 3); // 優先度高い順
-    if (sortKey === "elapsed") return new Date(a.date) - new Date(b.date); // 古い順（経過長い順）
-    if (sortKey === "date") return new Date(b.date) - new Date(a.date); // 新しい順
+    if (a.replied !== b.replied) return a.replied ? 1 : -1;
+    if (sortKey === "priority") return (b.priority || 3) - (a.priority || 3);
+    if (sortKey === "elapsed") return new Date(a.date) - new Date(b.date);
+    if (sortKey === "date") return new Date(b.date) - new Date(a.date);
     if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
     return 0;
   });
@@ -409,7 +411,7 @@ export default function App() {
           )}
 
           {sortedItems.map((item, i) => {
-            const level = urgencyLevel(item.date, item.priority);
+            const level = item.replied ? "replied" : urgencyLevel(item.date, item.priority);
             const status = STATUS_CONFIG[level];
             const isDismissing = dismissed[item.threadId];
             const isExpanded = expandedId === item.threadId;
@@ -424,7 +426,7 @@ export default function App() {
                 style={{
                   borderBottom: i < sortedItems.length - 1 ? "1px solid #f0f0ee" : "none",
                   animation: `fadeIn 0.2s ease ${i * 0.03}s both`,
-                  opacity: isDismissing ? 0.3 : 1,
+                  opacity: isDismissing ? 0.3 : item.replied ? 0.65 : 1,
                   cursor: "pointer",
                 }}
               >
