@@ -56,11 +56,11 @@ export default function App() {
   function loadItems() {
     if (!GAS_URL) {
       setItems([
-        { threadId: "1", messageId: "m1", subject: "設立の件で相談", snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
-        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", snippet: "山田不動産の山田です。\n\nご依頼いただいた登記費用の見積書を添付いたします。\n\n【内訳】\n・登録免許税: 150,000円\n・司法書士報酬: 80,000円\n・定款認証費用: 52,000円\n・印紙代: 40,000円\n合計: 322,000円（税込）\n\nご確認の上、ご不明点がございましたらお知らせください。\n見積有効期限は今月末までとなります。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
-        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", snippet: "〇〇銀行 法人営業部でございます。\n\n法人口座開設に必要な書類をご案内いたします。\n\n【必要書類】\n① 登記簿謄本（発行から3ヶ月以内）\n② 印鑑証明書（発行から3ヶ月以内）\n③ 代表者の本人確認書類（運転免許証等）\n④ 会社の実印\n⑤ 届出印（銀行届出用）\n\nご準備でき次第、最寄りの支店窓口までお越しください。\n事前にご予約いただけるとスムーズです。\n\n何かご不明な点がございましたらお気軽にお問い合わせください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
-        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", snippet: "公証役場の佐々木です。\n\n定款認証の予約日程について候補をお送りします。\n\n【候補日時】\n・4月3日（木）14:00〜\n・4月5日（土）10:00〜\n・4月8日（火）15:30〜\n\nいずれかでご都合はいかがでしょうか。\n所要時間は約30分〜1時間を見込んでおります。\n\n当日は以下をお持ちください。\n・定款3通\n・発起人全員の印鑑証明書\n・身分証明書\n\nご返信お待ちしております。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
-        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", snippet: "佐藤法律事務所の佐藤です。\n\n契約書のドラフトを確認いたしました。\n以下の点について修正が必要と考えます。\n\n【修正箇所】\n■ 第3条（支払条件）\n現行: 「納品後30日以内」\n修正案: 「検収完了後30日以内」に変更を推奨します。\n\n■ 第7条（免責事項）\n天災等の不可抗力条項が不十分です。\n具体的な事由の列挙を追加すべきです。\n\n■ 第12条（契約解除）\n解除通知の方法について、書面に限定することを推奨します。\n\n修正案を別途お送りしますので、ご確認をお願いいたします。", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
+        { threadId: "1", messageId: "m1", subject: "設立の件で相談", summary: "定款3点の確認と打合せ日程の調整", snippet: "田中です。お世話になっております。\n\n先日お話しした設立の件ですが、定款の内容について確認したい点がございます。\n\n具体的には以下の3点です。\n1. 事業目的の記載範囲\n2. 役員構成と任期\n3. 株式の譲渡制限について\n\n来週あたりでお時間いただけますでしょうか。\n火曜か水曜の午後が都合良いです。\n\nよろしくお願いいたします。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
+        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", summary: "見積もり32万円の確認を求めている", snippet: "山田不動産の山田です。\n\nご依頼いただいた登記費用の見積書を添付いたします。\n\n【内訳】\n・登録免許税: 150,000円\n・司法書士報酬: 80,000円\n・定款認証費用: 52,000円\n・印紙代: 40,000円\n合計: 322,000円（税込）\n\nご確認の上、ご不明点がございましたらお知らせください。\n見積有効期限は今月末までとなります。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
+        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", summary: "必要書類の準備と来店予約の連絡待ち", snippet: "〇〇銀行 法人営業部でございます。\n\n法人口座開設に必要な書類をご案内いたします。\n\n【必要書類】\n① 登記簿謄本（発行から3ヶ月以内）\n② 印鑑証明書（発行から3ヶ月以内）\n③ 代表者の本人確認書類（運転免許証等）\n④ 会社の実印\n⑤ 届出印（銀行届出用）\n\nご準備でき次第、最寄りの支店窓口までお越しください。\n事前にご予約いただけるとスムーズです。\n\n何かご不明な点がございましたらお気軽にお問い合わせください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
+        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", summary: "3候補から希望日時の返答を求めている", snippet: "公証役場の佐々木です。\n\n定款認証の予約日程について候補をお送りします。\n\n【候補日時】\n・4月3日（木）14:00〜\n・4月5日（土）10:00〜\n・4月8日（火）15:30〜\n\nいずれかでご都合はいかがでしょうか。\n所要時間は約30分〜1時間を見込んでおります。\n\n当日は以下をお持ちください。\n・定款3通\n・発起人全員の印鑑証明書\n・身分証明書\n\nご返信お待ちしております。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
+        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", summary: "契約書3箇所の修正案への確認待ち", snippet: "佐藤法律事務所の佐藤です。\n\n契約書のドラフトを確認いたしました。\n以下の点について修正が必要と考えます。\n\n【修正箇所】\n■ 第3条（支払条件）\n現行: 「納品後30日以内」\n修正案: 「検収完了後30日以内」に変更を推奨します。\n\n■ 第7条（免責事項）\n天災等の不可抗力条項が不十分です。\n具体的な事由の列挙を追加すべきです。\n\n■ 第12条（契約解除）\n解除通知の方法について、書面に限定することを推奨します。\n\n修正案を別途お送りしますので、ご確認をお願いいたします。", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
       ]);
       return;
     }
@@ -392,21 +392,28 @@ export default function App() {
                   display: "grid",
                   gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
               }}>
-                {/* 件名 */}
-                <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                {/* 件名 + AI要約 */}
+                <div style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
                   <a
                     className="open-btn"
                     href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none" }}
+                    style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none", marginTop: 2 }}
                   >
                     Open
                   </a>
-                  <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {item.subject}
-                  </span>
+                  <div style={{ minWidth: 0, overflow: "hidden" }}>
+                    <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                      {item.subject}
+                    </span>
+                    {item.summary && (
+                      <span style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                        {item.summary}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* ステータス */}

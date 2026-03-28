@@ -15,10 +15,36 @@ const MY_EMAIL = Session.getActiveUser().getEmail();
 // Web API（フロント用）
 // ============================================
 function doGet(e) {
+  // アクセス時に返信済みチェック（リアルタイム性向上）
+  quickReplyCheck();
   const data = getStoredItems();
   const output = ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
   return output;
+}
+
+// 軽量な返信済みチェック（AI判定なし、返信済みだけ消す）
+function quickReplyCheck() {
+  const items = getStoredItems();
+  if (items.length === 0) return;
+
+  const stillNeeded = [];
+  for (const item of items) {
+    try {
+      const thread = GmailApp.getThreadById(item.threadId);
+      if (!thread) continue;
+      const messages = thread.getMessages();
+      const latest = messages[messages.length - 1];
+      if (latest.getFrom().includes(MY_EMAIL)) continue; // 返信済み → 消す
+      stillNeeded.push(item);
+    } catch (e) {
+      stillNeeded.push(item); // エラー時は残す
+    }
+  }
+
+  if (stillNeeded.length !== items.length) {
+    saveItems(stillNeeded);
+  }
 }
 
 // CORS対応
@@ -107,6 +133,25 @@ ${details}`;
       date: remaining[i].date,
       snippet: remaining[i].snippet,
     }));
+
+  // --- 3段目: AI要約（1行サマリー生成） ---
+  if (actionItems.length > 0) {
+    const summaryInput = actionItems.map((m, i) =>
+      `${i}: [${m.subject}] from: ${m.from}\n${m.snippet.substring(0, 500)}`
+    ).join("\n---\n");
+
+    const summaryPrompt = `各メールの要点を1行（30文字以内）で要約して。相手が何を求めているかを書いて。
+JSON配列で返して。例: ["見積もりへの回答を求めている", "日程候補への返答待ち"]
+
+${summaryInput}`;
+
+    const summaryResult = callHaiku(summaryPrompt);
+    const summaries = parseJsonArray(summaryResult);
+
+    for (let i = 0; i < actionItems.length; i++) {
+      actionItems[i].summary = summaries[i] || "";
+    }
+  }
 
   // 既存データとマージ（古いのも残す）
   const existing = getStoredItems();
