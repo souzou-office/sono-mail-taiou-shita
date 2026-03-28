@@ -3,6 +3,8 @@
 // ============================================
 // 設定: スクリプトプロパティに以下を設定
 //   ANTHROPIC_API_KEY: Anthropic APIキー
+//   BACKEND_URL: バックエンドのURL（例: https://xxx.com/api）
+//   BACKEND_USER_ID: バックエンドのユーザーID
 //   ALLOWED_ORIGINS: フロント側のURL（CORS用）
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
@@ -58,8 +60,18 @@ function scanEmails() {
     return;
   }
 
+  // --- 0段目: バックエンドの学習データでスキップ ---
+  const skipList = getSkipList();
+  const skipSet = new Set(skipList.map(e => e.toLowerCase()));
+  const afterSkip = unreplied.filter(m => !skipSet.has(extractEmailAddress(m.from).toLowerCase()));
+
+  if (afterSkip.length === 0) {
+    saveItems([]);
+    return;
+  }
+
   // --- 1段目: Haikuでタイトル一括フィルタ ---
-  const titles = unreplied.map((m, i) => `${i}: ${m.subject}（${m.from}）`).join("\n");
+  const titles = afterSkip.map((m, i) => `${i}: ${m.subject}（${m.from}）`).join("\n");
   const filterPrompt = `メルマガや自動通知など明らかに返信不要なものの番号をJSON配列で返して。迷ったら残して。
 
 ${titles}`;
@@ -67,7 +79,7 @@ ${titles}`;
   const filterResult = callHaiku(filterPrompt);
   const excludeIndices = parseJsonArray(filterResult);
 
-  const remaining = unreplied.filter((_, i) => !excludeIndices.includes(i));
+  const remaining = afterSkip.filter((_, i) => !excludeIndices.includes(i));
 
   if (remaining.length === 0) {
     saveItems([]);
@@ -204,6 +216,32 @@ function callHaiku(prompt) {
 
   const data = JSON.parse(response.getContentText());
   return data.content[0].text;
+}
+
+// ============================================
+// バックエンド連携
+// ============================================
+
+function getSkipList() {
+  const backendUrl = PropertiesService.getScriptProperties().getProperty("BACKEND_URL");
+  const userId = PropertiesService.getScriptProperties().getProperty("BACKEND_USER_ID");
+  if (!backendUrl || !userId) return [];
+
+  try {
+    const response = UrlFetchApp.fetch(`${backendUrl}/skip-list?userId=${userId}`, {
+      muteHttpExceptions: true,
+    });
+    const data = JSON.parse(response.getContentText());
+    return data.skipEmails || [];
+  } catch (e) {
+    console.log("スキップリスト取得失敗（バックエンド未接続）:", e);
+    return [];
+  }
+}
+
+function extractEmailAddress(from) {
+  const match = from.match(/<(.+?)>/);
+  return match ? match[1] : from;
 }
 
 // ============================================

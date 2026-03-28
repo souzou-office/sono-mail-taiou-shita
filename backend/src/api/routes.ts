@@ -80,6 +80,40 @@ router.post("/feedback", async (req, res) => {
 });
 
 // ============================================
+// スキップリスト（GAS連携用）
+// ============================================
+
+router.get("/skip-list", async (req, res) => {
+  const userId = req.query.userId as string;
+  if (!userId) return res.status(400).json({ error: "userId required" });
+
+  // 確定済みの「返信不要」パターン
+  const patterns = await prisma.learnedPattern.findMany({
+    where: { userId, ruleId: "NO_REPLY", confirmed: true },
+    select: { senderEmail: true },
+  });
+
+  // 返信不要カテゴリの送信者（NEWSLETTER, NOTIFICATION, MARKETING, RECEIPT）
+  const categories = await prisma.senderCategory.findMany({
+    where: {
+      userId,
+      category: { in: ["NEWSLETTER", "NOTIFICATION", "MARKETING", "RECEIPT"] },
+      confidence: { gte: 0.7 },
+    },
+    select: { email: true },
+  });
+
+  const skipEmails = [
+    ...new Set([
+      ...patterns.map((p) => p.senderEmail),
+      ...categories.map((c) => c.email),
+    ]),
+  ];
+
+  res.json({ skipEmails });
+});
+
+// ============================================
 // 学習状況
 // ============================================
 
