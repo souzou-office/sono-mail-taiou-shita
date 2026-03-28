@@ -50,15 +50,17 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [learningStats, setLearningStats] = useState(null);
   const [showStats, setShowStats] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+  const [sortKey, setSortKey] = useState("elapsed");
 
   function loadItems() {
     if (!GAS_URL) {
       setItems([
-        { threadId: "1", messageId: "m1", subject: "設立の件で相談", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
-        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
-        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
-        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
-        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
+        { threadId: "1", messageId: "m1", subject: "設立の件で相談", snippet: "お世話になっております。先日お話しした設立の件ですが、定款の内容について確認したい点がございます。来週あたりでお時間いただけますでしょうか。", from: "田中太郎 <tanaka@example.com>", date: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString() },
+        { threadId: "2", messageId: "m2", subject: "登記費用の見積依頼", snippet: "見積書を添付いたします。登記費用の内訳は以下の通りです。ご確認の上、ご不明点がございましたらお知らせください。", from: "山田不動産 <yamada@fudosan.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString() },
+        { threadId: "3", messageId: "m3", subject: "口座開設書類の確認", snippet: "法人口座開設に必要な書類をご案内いたします。①登記簿謄本 ②印鑑証明書 ③代表者の本人確認書類。ご準備でき次第ご連絡ください。", from: "〇〇銀行 法人営業部 <houjin@bank.co.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString() },
+        { threadId: "4", messageId: "m4", subject: "定款認証の日程について", snippet: "定款認証の予約日程について候補をお送りします。4月3日（木）14:00 または 4月5日（土）10:00 のいずれかでご都合はいかがでしょうか。", from: "公証役場 <koushou@example.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 52).toISOString() },
+        { threadId: "5", messageId: "m5", subject: "契約書の修正点について", snippet: "契約書のドラフトを確認いたしました。第3条の支払条件と第7条の免責事項について修正案をお送りしますので、ご確認をお願いいたします。", from: "佐藤弁護士事務所 <sato@law.jp>", date: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString() },
       ]);
       return;
     }
@@ -148,6 +150,20 @@ export default function App() {
   const urgentCount = visibleItems.filter((i) => urgencyLevel(i.date) === "urgent").length;
   const warningCount = visibleItems.filter((i) => urgencyLevel(i.date) === "warning").length;
 
+  // タブタイトルに件数バッジ
+  useEffect(() => {
+    const count = visibleItems.length;
+    document.title = count > 0 ? `(${count}) そのメール対応した？` : "そのメール対応した？";
+  }, [visibleItems.length]);
+
+  // ソート
+  const sortedItems = [...visibleItems].sort((a, b) => {
+    if (sortKey === "elapsed") return new Date(a.date) - new Date(b.date); // 古い順（経過長い順）
+    if (sortKey === "date") return new Date(b.date) - new Date(a.date); // 新しい順
+    if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
+    return 0;
+  });
+
   return (
     <>
       <style>{`
@@ -223,11 +239,33 @@ export default function App() {
 
       {/* ===== メインコンテンツ ===== */}
       <div style={{ padding: "24px 24px 80px", maxWidth: 1000, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 16 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a" }}>未対応メール</h2>
-          {items && (
-            <span style={{ fontSize: 13, color: "#999" }}>{visibleItems.length}件</span>
-          )}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#1a1a1a" }}>未対応メール</h2>
+            {items && (
+              <span style={{ fontSize: 13, color: "#999" }}>{visibleItems.length}件</span>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 4, fontSize: 11 }}>
+            {[
+              { key: "elapsed", label: "経過順" },
+              { key: "date", label: "新しい順" },
+              { key: "sender", label: "送信者順" },
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setSortKey(key)}
+                style={{
+                  padding: "3px 8px", borderRadius: 4, cursor: "pointer", fontWeight: 500,
+                  border: sortKey === key ? "1px solid #7c5cfc" : "1px solid #e5e5e3",
+                  background: sortKey === key ? "#f3f0ff" : "#fff",
+                  color: sortKey === key ? "#7c5cfc" : "#888",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ===== 学習状況パネル ===== */}
@@ -330,10 +368,11 @@ export default function App() {
             </div>
           )}
 
-          {visibleItems.map((item, i) => {
+          {sortedItems.map((item, i) => {
             const level = urgencyLevel(item.date);
             const status = STATUS_CONFIG[level];
             const isDismissing = dismissed[item.threadId];
+            const isExpanded = expandedId === item.threadId;
 
             return (
               <div
@@ -341,14 +380,18 @@ export default function App() {
                 className="table-row"
                 onMouseEnter={() => setHoveredId(item.threadId)}
                 onMouseLeave={() => setHoveredId(null)}
+                onClick={() => setExpandedId(isExpanded ? null : item.threadId)}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
-                  borderBottom: i < visibleItems.length - 1 ? "1px solid #f0f0ee" : "none",
+                  borderBottom: i < sortedItems.length - 1 ? "1px solid #f0f0ee" : "none",
                   animation: `fadeIn 0.2s ease ${i * 0.03}s both`,
                   opacity: isDismissing ? 0.3 : 1,
+                  cursor: "pointer",
                 }}
               >
+              <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
+              }}>
                 {/* 件名 */}
                 <div style={{ padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                   <a
@@ -356,6 +399,7 @@ export default function App() {
                     href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
                     style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none" }}
                   >
                     Open
@@ -404,7 +448,7 @@ export default function App() {
                 <div style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
                   <button
                     className="dismiss-btn replied-btn"
-                    onClick={() => handleReplied(item)}
+                    onClick={(e) => { e.stopPropagation(); handleReplied(item); }}
                     title="返信済み（リストから消します）"
                     style={{
                       fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
@@ -419,7 +463,7 @@ export default function App() {
                 <div style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
                   <button
                     className="dismiss-btn"
-                    onClick={() => handleDismiss(item)}
+                    onClick={(e) => { e.stopPropagation(); handleDismiss(item); }}
                     title="返信不要（AIが学習します）"
                     style={{
                       fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
@@ -430,10 +474,21 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              {/* スニペットプレビュー */}
+              {isExpanded && item.snippet && (
+                <div style={{
+                  padding: "0 16px 12px 16px", fontSize: 12, color: "#666",
+                  lineHeight: 1.6, animation: "fadeIn 0.15s ease",
+                }}>
+                  {item.snippet}
+                </div>
+              )}
+              </div>
             );
           })}
 
-          {items && visibleItems.length > 0 && (
+          {items && sortedItems.length > 0 && (
             <div style={{ padding: "8px 16px", fontSize: 12, color: "#bbb", borderTop: "1px solid #f0f0ee" }}>
               {visibleItems.length}件表示中
             </div>
