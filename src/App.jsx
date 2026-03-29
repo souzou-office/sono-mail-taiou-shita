@@ -212,6 +212,19 @@ export default function App() {
         .undo-btn:hover { background: #4338ca !important; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @media (max-width: 768px) {
+          .table-header { display: none !important; }
+          .table-row .grid-row { display: flex !important; flex-wrap: wrap !important; gap: 4px 12px !important; padding: 10px 14px !important; }
+          .table-row .grid-row > * { padding: 0 !important; }
+          .table-row .grid-row .col-subject { width: 100% !important; margin-bottom: 2px; }
+          .table-row .grid-row .col-status { order: 2; }
+          .table-row .grid-row .col-sender { order: 3; }
+          .table-row .grid-row .col-date { order: 4; }
+          .table-row .grid-row .col-elapsed { order: 5; }
+          .table-row .grid-row .col-btn { order: 6; }
+          .sort-bar { flex-wrap: wrap !important; }
+          .open-btn, .dismiss-btn { opacity: 1 !important; }
+        }
       `}</style>
 
       {/* ===== 白ヘッダー ===== */}
@@ -277,7 +290,7 @@ export default function App() {
 
       {/* ===== メインコンテンツ ===== */}
       <div style={{ padding: "24px 24px 80px", maxWidth: 1000, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div className="sort-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
               onClick={() => setActiveTab("pending")}
@@ -388,7 +401,7 @@ export default function App() {
           overflow: "hidden",
         }}>
           {/* ヘッダー */}
-          <div style={{
+          <div className="table-header" style={{
             display: "grid",
             gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
             borderBottom: "1px solid #e5e5e3",
@@ -443,12 +456,12 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-              <div style={{
+              <div className="grid-row" style={{
                   display: "grid",
                   gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
               }}>
                 {/* 件名 + AI要約 */}
-                <div style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+                <div className="col-subject" style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
                   <a
                     className="open-btn"
                     href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
@@ -472,7 +485,7 @@ export default function App() {
                 </div>
 
                 {/* ステータス + 優先度 */}
-                <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 4 }}>
+                <div className="col-status" style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 4 }}>
                   <span style={{
                     fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 4,
                     background: status.bg, color: status.color, border: `1px solid ${status.border}`, whiteSpace: "nowrap",
@@ -502,7 +515,7 @@ export default function App() {
                 </div>
 
                 {/* 送信者 */}
-                <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                <div className="col-sender" style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                   <div style={{
                     width: 22, height: 22, borderRadius: "50%",
                     background: `hsl(${item.from.charCodeAt(0) * 7 % 360}, 50%, 65%)`,
@@ -517,17 +530,17 @@ export default function App() {
                 </div>
 
                 {/* 受信日時 */}
-                <div style={{ padding: "10px 12px", fontSize: 12, color: "#888", display: "flex", alignItems: "center" }}>
+                <div className="col-date" style={{ padding: "10px 12px", fontSize: 12, color: "#888", display: "flex", alignItems: "center" }}>
                   {formatDate(item.date)}
                 </div>
 
                 {/* 経過 */}
-                <div style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
+                <div className="col-elapsed" style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
                   {timeAgo(item.date)}
                 </div>
 
                 {/* 対応済みボタン */}
-                <div style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
+                <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
                   <button
                     className="dismiss-btn replied-btn"
                     onClick={(e) => { e.stopPropagation(); handleReplied(item); }}
@@ -542,7 +555,7 @@ export default function App() {
                 </div>
 
                 {/* 対応不要ボタン */}
-                <div style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
+                <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
                   <button
                     className="dismiss-btn"
                     onClick={(e) => { e.stopPropagation(); handleDismiss(item); }}
@@ -613,7 +626,7 @@ export default function App() {
           overflow: "hidden",
         }}>
           {/* ヘッダー */}
-          <div style={{
+          <div className="table-header" style={{
             display: "grid",
             gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
             borderBottom: "1px solid #e5e5e3",
@@ -652,12 +665,12 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-                <div style={{
+                <div className="grid-row" style={{
                   display: "grid",
                   gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
                 }}>
                   {/* 件名 + AI要約 */}
-                  <div style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+                  <div className="col-subject" style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
                     <a
                       className="open-btn"
                       href={`https://mail.google.com/mail/u/0/#sent/${item.threadId}`}
@@ -681,19 +694,19 @@ export default function App() {
                   </div>
 
                   {/* 送信先 */}
-                  <div style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <div className="col-sender" style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                     <span style={{ fontSize: 12, color: "#555", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {item.to ? extractName(item.to) : ""}
                     </span>
                   </div>
 
                   {/* 送信日時 */}
-                  <div style={{ padding: "10px 12px", fontSize: 12, color: "#888", display: "flex", alignItems: "center" }}>
+                  <div className="col-date" style={{ padding: "10px 12px", fontSize: 12, color: "#888", display: "flex", alignItems: "center" }}>
                     {formatDate(item.date)}
                   </div>
 
                   {/* 経過 */}
-                  <div style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
+                  <div className="col-elapsed" style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
                     {timeAgo(item.date)}
                   </div>
                 </div>
