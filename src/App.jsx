@@ -645,7 +645,7 @@ export default function App() {
               <div
                 key={item.threadId}
                 className="table-row"
-                onClick={() => setExpandedId(expandedId === item.threadId ? null : item.threadId)}
+                onClick={() => setExpandedId(expandedId === `aw_${item.threadId}` ? null : `aw_${item.threadId}`)}
                 style={{
                   borderBottom: i < awaitingItems.length - 1 ? "1px solid #f0f0ee" : "none",
                   animation: `fadeIn 0.2s ease ${i * 0.03}s both`,
@@ -660,7 +660,7 @@ export default function App() {
                   <div style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
                     <a
                       className="open-btn"
-                      href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
+                      href={`https://mail.google.com/mail/u/0/#sent/${item.threadId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
@@ -699,7 +699,7 @@ export default function App() {
                 </div>
 
                 {/* プレビュー */}
-                {expandedId === item.threadId && item.snippet && (
+                {expandedId === `aw_${item.threadId}` && item.snippet && (
                   <div style={{
                     borderTop: "1px solid #f0f0ee", marginTop: 2,
                     animation: "fadeIn 0.15s ease",
