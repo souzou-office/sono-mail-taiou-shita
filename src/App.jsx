@@ -203,9 +203,15 @@ export default function App() {
   }, [visibleItems.length, awaitingItems.length]);
 
   // ソート（返信済みは常に下）
+  const urgencyOrder = { urgent: 0, warning: 1, normal: 2, low: 3, replied: 4 };
   const sortedItems = [...visibleItems].sort((a, b) => {
     if (a.replied !== b.replied) return a.replied ? 1 : -1;
-    if (sortKey === "priority") return (b.priority || 3) - (a.priority || 3);
+    if (sortKey === "priority") {
+      const ua = urgencyOrder[urgencyLevel(a.date, a.priority)] || 2;
+      const ub = urgencyOrder[urgencyLevel(b.date, b.priority)] || 2;
+      if (ua !== ub) return ua - ub;
+      return (b.priority || 3) - (a.priority || 3);
+    }
     if (sortKey === "elapsed") return new Date(a.date) - new Date(b.date);
     if (sortKey === "date") return new Date(b.date) - new Date(a.date);
     if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
