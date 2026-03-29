@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ユーザー
+// ============================================
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  accessToken  String?
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  judgments        Judgment[]
+  senderCategories SenderCategory[]
+  feedbacks        ClassificationFeedback[]
+  learnedPatterns  LearnedPattern[]
+  senderHistories  SenderHistory[]
+}
+
+// ============================================
+// 判定結果（メール毎の「返信必要？」の結果）
+// ============================================
+model Judgment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  threadId  String
+  messageId String
+  status    JudgmentStatus // NEEDS_REPLY or SKIP
+  reason    String?
+  matchType MatchType?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, messageId])
+}
+
+enum JudgmentStatus {
+  NEEDS_REPLY // 返信必要
+  SKIP        // 返信不要
+}
+
+enum MatchType {
+  SENDER_CATEGORY  // 送信者カテゴリで即判定
+  LEARNED_PATTERN  // 学習パターンで即判定
+  AI               // AI判定
+}
+
+// ============================================
+// 送信者カテゴリ
+// ============================================
+model SenderCategory {
+  id         String             @id @default(cuid())
+  userId     String
+  user       User               @relation(fields: [userId], references: [id])
+  email      String
+  category   SenderCategoryType
+  confidence Float              @default(0.5)
+  analyzedAt DateTime           @default(now())
+
+  @@unique([userId, email])
+}
+
+enum SenderCategoryType {
+  HUMAN
+  NEWSLETTER
+  NOTIFICATION
+  MARKETING
+  RECEIPT
+  CALENDAR
+  COLD_EMAIL
+  UNKNOWN
+}
+
+// ============================================
+// Classification Feedback（ユーザー修正）
+// ============================================
+model ClassificationFeedback {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  senderEmail    String
+  messageId      String
+  threadId       String
+  previousRuleId String?
+  correctedRuleId String  // "NEEDS_REPLY" or "NO_REPLY"
+  createdAt      DateTime @default(now())
+
+  @@index([userId, senderEmail])
+}
+
+// ============================================
+// Learned Patterns（学習パターン）
+// ============================================
+model LearnedPattern {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  senderEmail String
+  ruleId      String   // "NEEDS_REPLY" or "NO_REPLY"
+  hitCount    Int      @default(1)
+  confirmed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, senderEmail])
+}
+
+// ============================================
+// Sender History（過去メール文脈キャッシュ）
+// ============================================
+model SenderHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  senderEmail  String
+  subjects     String   // JSON配列
+  snippets     String   // JSON配列
+  messageCount Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, senderEmail])
+}

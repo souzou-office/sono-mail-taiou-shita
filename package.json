@@ -4,7 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n front,back -c cyan,green \"vite\" \"cd backend && npx tsx watch src/server.ts\"",
+    "dev:front": "vite",
+    "dev:back": "cd backend && npx tsx watch src/server.ts",
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "vite build && gh-pages -d dist"
@@ -15,6 +17,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.2.1",
     "gh-pages": "^6.1.1",
     "vite": "^5.4.0",
     "vite-plugin-pwa": "^0.20.0"
