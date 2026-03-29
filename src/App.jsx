@@ -95,7 +95,9 @@ export default function App() {
     fetch(GAS_URL)
       .then((r) => r.json())
       .then((data) => {
-        setItems(data.pending || data);
+        const dismissedIds = loadDismissedIds();
+        const pending = (data.pending || data).filter((it) => !dismissedIds.includes(it.threadId));
+        setItems(pending);
         setAwaitingItems(data.awaiting || []);
         setError(null);
       })
@@ -145,6 +147,14 @@ export default function App() {
     setUndoTimer(timer);
   }
 
+  function saveDismissedIds(ids) {
+    try { localStorage.setItem("dismissed_threads", JSON.stringify(ids)); } catch (e) {}
+  }
+
+  function loadDismissedIds() {
+    try { return JSON.parse(localStorage.getItem("dismissed_threads") || "[]"); } catch (e) { return []; }
+  }
+
   function confirmDismiss(item) {
     const target = item || undoItem;
     if (!target) return;
@@ -163,6 +173,9 @@ export default function App() {
       }).catch(() => {});
     }
 
+    const ids = loadDismissedIds();
+    if (!ids.includes(target.threadId)) { ids.push(target.threadId); saveDismissedIds(ids); }
+
     setItems((prev) => prev ? prev.filter((it) => it.threadId !== target.threadId) : prev);
     setDismissed((prev) => { const next = { ...prev }; delete next[target.threadId]; return next; });
     setUndoItem(null);
@@ -172,6 +185,8 @@ export default function App() {
   function handleUndo() {
     if (!undoItem) return;
     if (undoTimer) clearTimeout(undoTimer);
+    const ids = loadDismissedIds().filter((id) => id !== undoItem.threadId);
+    saveDismissedIds(ids);
     setDismissed((prev) => { const next = { ...prev }; delete next[undoItem.threadId]; return next; });
     setUndoItem(null);
     setUndoTimer(null);
@@ -761,8 +776,8 @@ export default function App() {
           boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
           zIndex: 100,
         }}>
-          <span>
-            「{undoItem.subject.length > 20 ? undoItem.subject.substring(0, 20) + "..." : undoItem.subject}」を返信不要にしました
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            不要にしました
           </span>
           <button
             className="undo-btn"
