@@ -207,8 +207,8 @@ export default function App() {
   const sortedItems = [...visibleItems].sort((a, b) => {
     if (a.replied !== b.replied) return a.replied ? 1 : -1;
     if (sortKey === "priority") {
-      const ua = urgencyOrder[urgencyLevel(a.date, a.priority)] || 2;
-      const ub = urgencyOrder[urgencyLevel(b.date, b.priority)] || 2;
+      const ua = urgencyOrder[urgencyLevel(a.date, a.priority)] ?? 2;
+      const ub = urgencyOrder[urgencyLevel(b.date, b.priority)] ?? 2;
       if (ua !== ub) return ua - ub;
       return (b.priority || 3) - (a.priority || 3);
     }
