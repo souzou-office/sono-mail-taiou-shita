@@ -315,6 +315,7 @@ ${details}`;
       subject: awaiting[i].subject,
       to: awaiting[i].to,
       date: awaiting[i].date,
+      snippet: awaiting[i].snippet,
       type: "awaiting_reply",
     }));
 
