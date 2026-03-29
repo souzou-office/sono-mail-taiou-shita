@@ -228,6 +228,7 @@ export default function App() {
           .header-inner img { height: 40px !important; }
           .header-inner { padding: 8px 14px !important; }
           .header-right { flex-wrap: wrap !important; }
+          .undo-toast { left: 14px !important; right: 14px !important; transform: none !important; bottom: 16px !important; }
         }
       `}</style>
 
