@@ -652,15 +652,27 @@ export default function App() {
                   gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
                 }}>
                   {/* 件名 + AI要約 */}
-                  <div style={{ padding: "10px 16px", minWidth: 0 }}>
-                    <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
-                      {item.subject}
-                    </span>
-                    {item.summary && (
-                      <span style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
-                        {item.summary}
+                  <div style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+                    <a
+                      className="open-btn"
+                      href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none", marginTop: 2 }}
+                    >
+                      Open
+                    </a>
+                    <div style={{ minWidth: 0, overflow: "hidden" }}>
+                      <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                        {item.subject}
                       </span>
-                    )}
+                      {item.summary && (
+                        <span style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                          {item.summary}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* 送信先 */}
@@ -680,6 +692,22 @@ export default function App() {
                     {timeAgo(item.date)}
                   </div>
                 </div>
+
+                {/* プレビュー */}
+                {expandedId === item.threadId && item.snippet && (
+                  <div style={{
+                    borderTop: "1px solid #f0f0ee", marginTop: 2,
+                    animation: "fadeIn 0.15s ease",
+                  }}>
+                    <div style={{
+                      padding: "10px 16px 12px", fontSize: 12, color: "#555",
+                      lineHeight: 1.7, maxHeight: 300, overflowY: "auto",
+                      whiteSpace: "pre-wrap", wordBreak: "break-word",
+                    }}>
+                      {item.snippet}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
