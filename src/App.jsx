@@ -244,6 +244,7 @@ export default function App() {
           .table-row .grid-row .col-btn { order: 6; }
           .sort-bar { flex-wrap: wrap !important; }
           .open-btn, .dismiss-btn { opacity: 1 !important; }
+          .open-btn { display: inline-flex !important; padding: 6px 12px !important; font-size: 13px !important; background: #f3f0ff !important; border-radius: 6px !important; }
           .header-inner { flex-wrap: wrap !important; gap: 8px !important; padding: 6px 14px !important; }
           .header-inner img { height: 40px !important; }
           .header-inner { padding: 8px 14px !important; }
