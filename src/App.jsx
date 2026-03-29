@@ -218,7 +218,7 @@ export default function App() {
       <header style={{
         background: "#fff",
         borderBottom: "1px solid #e5e5e3",
-        padding: "12px 24px",
+        padding: "4px 24px",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
@@ -230,7 +230,7 @@ export default function App() {
           <img
             src={`${import.meta.env.BASE_URL}logo.png`}
             alt="そのメール対応した？"
-            style={{ height: 36 }}
+            style={{ height: 48 }}
             onError={(e) => { e.target.style.display = "none"; }}
           />
         </div>
