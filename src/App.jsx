@@ -71,7 +71,7 @@ export default function App() {
   const [learningStats, setLearningStats] = useState(null);
   const [showStats, setShowStats] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
-  const [sortKey, setSortKey] = useState("elapsed");
+  const [sortKey, setSortKey] = useState("priority");
   const [activeTab, setActiveTab] = useState("pending");
   const [awaitingItems, setAwaitingItems] = useState([]);
 
@@ -212,7 +212,6 @@ export default function App() {
       if (ua !== ub) return ua - ub;
       return (b.priority || 3) - (a.priority || 3);
     }
-    if (sortKey === "elapsed") return new Date(a.date) - new Date(b.date);
     if (sortKey === "date") return new Date(b.date) - new Date(a.date);
     if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
     return 0;
@@ -342,7 +341,6 @@ export default function App() {
           <div style={{ display: "flex", gap: 4, fontSize: 11 }}>
             {[
               { key: "priority", label: "優先度順" },
-              { key: "elapsed", label: "経過順" },
               { key: "date", label: "新しい順" },
               { key: "sender", label: "送信者順" },
             ].map(({ key, label }) => (
