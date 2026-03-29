@@ -225,7 +225,8 @@ export default function App() {
           .sort-bar { flex-wrap: wrap !important; }
           .open-btn, .dismiss-btn { opacity: 1 !important; }
           .header-inner { flex-wrap: wrap !important; gap: 8px !important; padding: 6px 14px !important; }
-          .header-inner img { height: 32px !important; }
+          .header-inner img { height: 40px !important; }
+          .header-inner { padding: 8px 14px !important; }
           .header-right { flex-wrap: wrap !important; }
         }
       `}</style>
