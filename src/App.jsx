@@ -218,55 +218,60 @@ export default function App() {
       <header style={{
         background: "#fff",
         borderBottom: "1px solid #e5e5e3",
-        padding: "4px 24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
         position: "sticky",
         top: 0,
         zIndex: 10,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img
-            src={`${import.meta.env.BASE_URL}logo.png`}
-            alt="そのメール対応した？"
-            style={{ height: 48 }}
-            onError={(e) => { e.target.style.display = "none"; }}
-          />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-          {urgentCount > 0 && (
-            <span style={{ background: STATUS_CONFIG.urgent.bg, color: STATUS_CONFIG.urgent.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-              至急 {urgentCount}
-            </span>
-          )}
-          {warningCount > 0 && (
-            <span style={{ background: STATUS_CONFIG.warning.bg, color: STATUS_CONFIG.warning.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-              要注意 {warningCount}
-            </span>
-          )}
-          <button
-            onClick={() => { setShowStats(!showStats); if (!showStats && !learningStats) loadLearningStats(); }}
-            className="stats-btn"
-            style={{
-              fontSize: 11, color: "#666", background: showStats ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
-              borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
-            }}
-          >
-            学習状況
-          </button>
-          <button
-            onClick={loadItems}
-            disabled={refreshing}
-            className="refresh-btn"
-            style={{
-              fontSize: 11, color: "#666", background: "#fff", border: "1px solid #e5e5e3",
-              borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
-              opacity: refreshing ? 0.5 : 1,
-            }}
-          >
-            {refreshing ? "更新中..." : "更新"}
-          </button>
+        <div style={{
+          maxWidth: 1000,
+          margin: "0 auto",
+          padding: "4px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <img
+              src={`${import.meta.env.BASE_URL}logo.png`}
+              alt="そのメール対応した？"
+              style={{ height: 48 }}
+              onError={(e) => { e.target.style.display = "none"; }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            {urgentCount > 0 && (
+              <span style={{ background: STATUS_CONFIG.urgent.bg, color: STATUS_CONFIG.urgent.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
+                至急 {urgentCount}
+              </span>
+            )}
+            {warningCount > 0 && (
+              <span style={{ background: STATUS_CONFIG.warning.bg, color: STATUS_CONFIG.warning.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
+                要注意 {warningCount}
+              </span>
+            )}
+            <button
+              onClick={() => { setShowStats(!showStats); if (!showStats && !learningStats) loadLearningStats(); }}
+              className="stats-btn"
+              style={{
+                fontSize: 11, color: "#666", background: showStats ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
+                borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+              }}
+            >
+              学習状況
+            </button>
+            <button
+              onClick={loadItems}
+              disabled={refreshing}
+              className="refresh-btn"
+              style={{
+                fontSize: 11, color: "#666", background: "#fff", border: "1px solid #e5e5e3",
+                borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+                opacity: refreshing ? 0.5 : 1,
+              }}
+            >
+              {refreshing ? "更新中..." : "更新"}
+            </button>
+          </div>
         </div>
       </header>
 
