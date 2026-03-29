@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/sono-mail-taiou-shita/sw.js', { scope: '/sono-mail-taiou-shita/' })})}
