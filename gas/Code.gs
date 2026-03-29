@@ -14,7 +14,18 @@ const MY_EMAIL = Session.getActiveUser().getEmail() || Session.getEffectiveUser(
 // ============================================
 // Web API（フロント用）
 // ============================================
+const ACCESS_TOKEN = PropertiesService.getScriptProperties().getProperty("ACCESS_TOKEN") || "";
+
+// ============================================
+// Web API（フロント用）
+// ============================================
 function doGet(e) {
+  // トークン認証
+  if (ACCESS_TOKEN && (!e || !e.parameter || e.parameter.token !== ACCESS_TOKEN)) {
+    return ContentService.createTextOutput(JSON.stringify({ error: "Unauthorized" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // アクセス時に返信済みチェック（リアルタイム性向上）
   quickReplyCheck();
   const pending = getStoredItems();

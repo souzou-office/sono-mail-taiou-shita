@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 
 const GAS_URL = import.meta.env.VITE_GAS_URL || "";
+const GAS_TOKEN = import.meta.env.VITE_GAS_TOKEN || "";
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 function extractName(from) {
