@@ -244,6 +244,7 @@ export default function App() {
           .table-row .grid-row .col-btn { order: 6; }
           .sort-bar { flex-wrap: wrap !important; }
           .open-btn, .dismiss-btn { opacity: 1 !important; }
+          .open-btn { display: inline-flex !important; padding: 6px 12px !important; font-size: 13px !important; background: #f3f0ff !important; border-radius: 6px !important; }
           .header-inner { flex-wrap: wrap !important; gap: 8px !important; padding: 6px 14px !important; }
           .header-inner img { height: 40px !important; }
           .header-inner { padding: 8px 14px !important; }
@@ -491,7 +492,8 @@ export default function App() {
                     href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`, "_blank"); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`, "_blank"); }}
                     style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none", marginTop: 2 }}
                   >
                     Open
@@ -700,7 +702,8 @@ export default function App() {
                       href={`https://mail.google.com/mail/u/0/#sent/${item.threadId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#sent/${item.threadId}`, "_blank"); }}
+                      onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#sent/${item.threadId}`, "_blank"); }}
                       style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none", marginTop: 2 }}
                     >
                       Open
