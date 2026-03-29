@@ -699,7 +699,7 @@ export default function App() {
                 </div>
 
                 {/* プレビュー */}
-                {expandedId === `aw_${item.threadId}` && item.snippet && (
+                {expandedId === `aw_${item.threadId}` && (item.snippet || item.summary) && (
                   <div style={{
                     borderTop: "1px solid #f0f0ee", marginTop: 2,
                     animation: "fadeIn 0.15s ease",
@@ -709,7 +709,7 @@ export default function App() {
                       lineHeight: 1.7, maxHeight: 300, overflowY: "auto",
                       whiteSpace: "pre-wrap", wordBreak: "break-word",
                     }}>
-                      {item.snippet}
+                      {item.snippet || item.summary}
                     </div>
                   </div>
                 )}
