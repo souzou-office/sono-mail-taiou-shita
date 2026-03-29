@@ -492,7 +492,8 @@ export default function App() {
                     href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`, "_blank"); }}
+                    onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`, "_blank"); }}
                     style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none", marginTop: 2 }}
                   >
                     Open
@@ -701,7 +702,8 @@ export default function App() {
                       href={`https://mail.google.com/mail/u/0/#sent/${item.threadId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#sent/${item.threadId}`, "_blank"); }}
+                      onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); window.open(`https://mail.google.com/mail/u/0/#sent/${item.threadId}`, "_blank"); }}
                       style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none", marginTop: 2 }}
                     >
                       Open
