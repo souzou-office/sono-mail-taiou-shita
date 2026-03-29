@@ -218,55 +218,60 @@ export default function App() {
       <header style={{
         background: "#fff",
         borderBottom: "1px solid #e5e5e3",
-        padding: "4px 24px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
         position: "sticky",
         top: 0,
         zIndex: 10,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <img
-            src={`${import.meta.env.BASE_URL}logo.png`}
-            alt="そのメール対応した？"
-            style={{ height: 48 }}
-            onError={(e) => { e.target.style.display = "none"; }}
-          />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-          {urgentCount > 0 && (
-            <span style={{ background: STATUS_CONFIG.urgent.bg, color: STATUS_CONFIG.urgent.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-              至急 {urgentCount}
-            </span>
-          )}
-          {warningCount > 0 && (
-            <span style={{ background: STATUS_CONFIG.warning.bg, color: STATUS_CONFIG.warning.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
-              要注意 {warningCount}
-            </span>
-          )}
-          <button
-            onClick={() => { setShowStats(!showStats); if (!showStats && !learningStats) loadLearningStats(); }}
-            className="stats-btn"
-            style={{
-              fontSize: 11, color: "#666", background: showStats ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
-              borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
-            }}
-          >
-            学習状況
-          </button>
-          <button
-            onClick={loadItems}
-            disabled={refreshing}
-            className="refresh-btn"
-            style={{
-              fontSize: 11, color: "#666", background: "#fff", border: "1px solid #e5e5e3",
-              borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
-              opacity: refreshing ? 0.5 : 1,
-            }}
-          >
-            {refreshing ? "更新中..." : "更新"}
-          </button>
+        <div style={{
+          maxWidth: 1000,
+          margin: "0 auto",
+          padding: "4px 24px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <img
+              src={`${import.meta.env.BASE_URL}logo.png`}
+              alt="そのメール対応した？"
+              style={{ height: 48 }}
+              onError={(e) => { e.target.style.display = "none"; }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+            {urgentCount > 0 && (
+              <span style={{ background: STATUS_CONFIG.urgent.bg, color: STATUS_CONFIG.urgent.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
+                至急 {urgentCount}
+              </span>
+            )}
+            {warningCount > 0 && (
+              <span style={{ background: STATUS_CONFIG.warning.bg, color: STATUS_CONFIG.warning.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
+                要注意 {warningCount}
+              </span>
+            )}
+            <button
+              onClick={() => { setShowStats(!showStats); if (!showStats && !learningStats) loadLearningStats(); }}
+              className="stats-btn"
+              style={{
+                fontSize: 11, color: "#666", background: showStats ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
+                borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+              }}
+            >
+              学習状況
+            </button>
+            <button
+              onClick={loadItems}
+              disabled={refreshing}
+              className="refresh-btn"
+              style={{
+                fontSize: 11, color: "#666", background: "#fff", border: "1px solid #e5e5e3",
+                borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+                opacity: refreshing ? 0.5 : 1,
+              }}
+            >
+              {refreshing ? "更新中..." : "更新"}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -652,15 +657,27 @@ export default function App() {
                   gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
                 }}>
                   {/* 件名 + AI要約 */}
-                  <div style={{ padding: "10px 16px", minWidth: 0 }}>
-                    <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
-                      {item.subject}
-                    </span>
-                    {item.summary && (
-                      <span style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
-                        {item.summary}
+                  <div style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
+                    <a
+                      className="open-btn"
+                      href={`https://mail.google.com/mail/u/0/#inbox/${item.threadId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ fontSize: 11, color: "#7c5cfc", whiteSpace: "nowrap", fontWeight: 500, textDecoration: "none", marginTop: 2 }}
+                    >
+                      Open
+                    </a>
+                    <div style={{ minWidth: 0, overflow: "hidden" }}>
+                      <span style={{ fontSize: 13, color: "#1a1a1a", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                        {item.subject}
                       </span>
-                    )}
+                      {item.summary && (
+                        <span style={{ fontSize: 11, color: "#999", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+                          {item.summary}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* 送信先 */}
@@ -680,6 +697,22 @@ export default function App() {
                     {timeAgo(item.date)}
                   </div>
                 </div>
+
+                {/* プレビュー */}
+                {expandedId === item.threadId && item.snippet && (
+                  <div style={{
+                    borderTop: "1px solid #f0f0ee", marginTop: 2,
+                    animation: "fadeIn 0.15s ease",
+                  }}>
+                    <div style={{
+                      padding: "10px 16px 12px", fontSize: 12, color: "#555",
+                      lineHeight: 1.7, maxHeight: 300, overflowY: "auto",
+                      whiteSpace: "pre-wrap", wordBreak: "break-word",
+                    }}>
+                      {item.snippet}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
