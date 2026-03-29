@@ -224,6 +224,9 @@ export default function App() {
           .table-row .grid-row .col-btn { order: 6; }
           .sort-bar { flex-wrap: wrap !important; }
           .open-btn, .dismiss-btn { opacity: 1 !important; }
+          .header-inner { flex-wrap: wrap !important; gap: 8px !important; padding: 6px 14px !important; }
+          .header-inner img { height: 32px !important; }
+          .header-right { flex-wrap: wrap !important; }
         }
       `}</style>
 
@@ -235,7 +238,7 @@ export default function App() {
         top: 0,
         zIndex: 10,
       }}>
-        <div style={{
+        <div className="header-inner" style={{
           maxWidth: 1000,
           margin: "0 auto",
           padding: "4px 24px",
@@ -251,7 +254,7 @@ export default function App() {
               onError={(e) => { e.target.style.display = "none"; }}
             />
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+          <div className="header-right" style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
             {urgentCount > 0 && (
               <span style={{ background: STATUS_CONFIG.urgent.bg, color: STATUS_CONFIG.urgent.color, padding: "2px 8px", borderRadius: 10, fontWeight: 600 }}>
                 至急 {urgentCount}
