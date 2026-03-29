@@ -9,7 +9,7 @@
 
 const HAIKU_MODEL = "claude-haiku-4-5-20251001";
 const SCAN_HOURS = 48; // 過去何時間をスキャン
-const MY_EMAIL = Session.getActiveUser().getEmail();
+const MY_EMAIL = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
 
 // ============================================
 // Web API（フロント用）
@@ -37,7 +37,7 @@ function quickReplyCheck() {
       const messages = thread.getMessages();
       const latest = messages[messages.length - 1];
       const wasReplied = item.replied || false;
-      const isReplied = latest.getFrom().includes(MY_EMAIL);
+      const isReplied = MY_EMAIL ? latest.getFrom().includes(MY_EMAIL) : false;
       if (isReplied !== wasReplied) {
         item.replied = isReplied;
         changed = true;
