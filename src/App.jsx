@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 
 const GAS_URL = import.meta.env.VITE_GAS_URL || "";
+const API_TOKEN = import.meta.env.VITE_API_TOKEN || "";
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 function extractName(from) {
@@ -92,7 +93,7 @@ export default function App() {
       return;
     }
     setRefreshing(true);
-    fetch(GAS_URL)
+    fetch(`${GAS_URL}?token=${API_TOKEN}`)
       .then((r) => r.json())
       .then((data) => {
         const dismissedIds = loadDismissedIds();
