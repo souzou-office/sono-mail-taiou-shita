@@ -206,15 +206,17 @@ export default function App() {
   // ソート（返信済みは常に下、至急→要注意→未対応→低の順）
   const urgencyOrder = { urgent: 0, warning: 1, normal: 2, low: 3, replied: 4 };
   const sortedItems = [...visibleItems].sort((a, b) => {
-    if (a.replied !== b.replied) return a.replied ? 1 : -1;
     if (sortKey === "priority") {
-      // まずステータス順（至急→要注意→未対応→低）
-      const ua = urgencyOrder[urgencyLevel(a.date, a.priority)] || 2;
-      const ub = urgencyOrder[urgencyLevel(b.date, b.priority)] || 2;
+      // まずステータス順（至急→要注意→未対応→低→返信済み）
+      const levelA = a.replied ? "replied" : urgencyLevel(a.date, a.priority);
+      const levelB = b.replied ? "replied" : urgencyLevel(b.date, b.priority);
+      const ua = urgencyOrder[levelA] ?? 2;
+      const ub = urgencyOrder[levelB] ?? 2;
       if (ua !== ub) return ua - ub;
       // 同じステータスなら古い順（放置が長い方が上）
       return new Date(a.date) - new Date(b.date);
     }
+    if (a.replied !== b.replied) return a.replied ? 1 : -1;
     if (sortKey === "date") return new Date(b.date) - new Date(a.date);
     if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
     return 0;
