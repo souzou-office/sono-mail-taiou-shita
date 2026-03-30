@@ -208,11 +208,11 @@ export default function App() {
   const sortedItems = [...visibleItems].sort((a, b) => {
     if (a.replied !== b.replied) return a.replied ? 1 : -1;
     if (sortKey === "priority") {
-      // まずpriorityの高い順（5→1）
-      const pa = a.priority || 3;
-      const pb = b.priority || 3;
-      if (pa !== pb) return pb - pa;
-      // 同じpriorityなら古い順（経過時間が長い方が上）
+      // まずステータス順（至急→要注意→未対応→低）
+      const ua = urgencyOrder[urgencyLevel(a.date, a.priority)] || 2;
+      const ub = urgencyOrder[urgencyLevel(b.date, b.priority)] || 2;
+      if (ua !== ub) return ua - ub;
+      // 同じステータスなら古い順（放置が長い方が上）
       return new Date(a.date) - new Date(b.date);
     }
     if (sortKey === "date") return new Date(b.date) - new Date(a.date);
@@ -521,16 +521,6 @@ export default function App() {
                   }}>
                     {status.label}
                   </span>
-                  {item.priority && PRIORITY_LABELS[item.priority] && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 3,
-                      background: PRIORITY_LABELS[item.priority].bg,
-                      color: PRIORITY_LABELS[item.priority].color,
-                      whiteSpace: "nowrap",
-                    }}>
-                      P{item.priority}
-                    </span>
-                  )}
                   {item.mood && MOOD_CONFIG[item.mood] && item.mood !== "calm" && (
                     <span style={{
                       fontSize: 10, fontWeight: 500, padding: "1px 5px", borderRadius: 3,
