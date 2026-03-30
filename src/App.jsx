@@ -203,15 +203,17 @@ export default function App() {
     document.title = total > 0 ? `(${total}) そのメール対応した？` : "そのメール対応した？";
   }, [visibleItems.length, awaitingItems.length]);
 
-  // ソート（返信済みは常に下）
+  // ソート（返信済みは常に下、至急→要注意→未対応→低の順）
   const urgencyOrder = { urgent: 0, warning: 1, normal: 2, low: 3, replied: 4 };
   const sortedItems = [...visibleItems].sort((a, b) => {
     if (a.replied !== b.replied) return a.replied ? 1 : -1;
     if (sortKey === "priority") {
-      const ua = urgencyOrder[urgencyLevel(a.date, a.priority)] || 2;
-      const ub = urgencyOrder[urgencyLevel(b.date, b.priority)] || 2;
-      if (ua !== ub) return ua - ub;
-      return (b.priority || 3) - (a.priority || 3);
+      // まずpriorityの高い順（5→1）
+      const pa = a.priority || 3;
+      const pb = b.priority || 3;
+      if (pa !== pb) return pb - pa;
+      // 同じpriorityなら古い順（経過時間が長い方が上）
+      return new Date(a.date) - new Date(b.date);
     }
     if (sortKey === "date") return new Date(b.date) - new Date(a.date);
     if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
@@ -263,7 +265,7 @@ export default function App() {
         zIndex: 10,
       }}>
         <div className="header-inner" style={{
-          maxWidth: 1000,
+          maxWidth: 1200,
           margin: "0 auto",
           padding: "4px 24px",
           display: "flex",
@@ -316,7 +318,7 @@ export default function App() {
       </header>
 
       {/* ===== メインコンテンツ ===== */}
-      <div style={{ padding: "24px 24px 80px", maxWidth: 1000, margin: "0 auto" }}>
+      <div style={{ padding: "24px 24px 80px", maxWidth: 1200, margin: "0 auto" }}>
         <div className="sort-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
@@ -429,7 +431,7 @@ export default function App() {
           {/* ヘッダー */}
           <div className="table-header" style={{
             display: "grid",
-            gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
+            gridTemplateColumns: "minmax(200px, 2fr) 160px 200px minmax(100px, 1fr) 80px 60px 60px",
             borderBottom: "1px solid #e5e5e3",
             background: "#fafaf9",
             fontSize: 11,
@@ -484,7 +486,7 @@ export default function App() {
               >
               <div className="grid-row" style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
+                  gridTemplateColumns: "minmax(200px, 2fr) 160px 200px minmax(100px, 1fr) 80px 60px 60px",
               }}>
                 {/* 件名 + AI要約 */}
                 <div className="col-subject" style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
