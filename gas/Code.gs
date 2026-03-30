@@ -322,51 +322,44 @@ function scanAwaitingReplies() {
     });
   }
 
-  // AI判定: 返信を期待しているメールだけ残す
+  // AI判定+要約を1回で
   if (awaiting.length === 0) {
     saveAwaitingItems([]);
     return;
   }
 
-  const details = awaiting.map((m, i) =>
-    `${i}: [${m.subject}] to: ${m.to}\n${m.snippet}`
-  ).join("\n---\n");
+  const awaitingItems = [];
+  for (let start = 0; start < awaiting.length; start += BATCH_SIZE) {
+    const batch = awaiting.slice(start, start + BATCH_SIZE);
+    const details = batch.map((m, i) =>
+      `=== メール ${i} ===\n件名: ${m.subject}\n宛先: ${m.to}\n本文:\n${m.snippet}`
+    ).join("\n\n");
 
-  const prompt = `以下は自分が送ったメールです。相手からの返信を待っているものの番号をJSON配列で返して。
-情報共有や挨拶だけのメールは除外して。質問・依頼・確認を含むものだけ残して。
+    const prompt = `以下は自分が送ったメールです。相手からの返信を待っているものだけ選んでください。
+情報共有や挨拶だけのメールは除外。質問・依頼・確認を含むものだけ残して。
+
+返信待ちのメールについてJSON配列で返してください。該当なしなら[]。
+[{"index": 番号, "summary": "相手に何を求めているか1行30文字以内"}]
 
 ${details}`;
 
-  const result = callClaude(prompt);
-  const indices = parseJsonArray(result);
+    const result = callClaude(prompt);
+    const match = result.match(/\[[\s\S]*\]/);
+    let judged = [];
+    try { judged = JSON.parse(match[0]); } catch { judged = []; }
 
-  const awaitingItems = indices
-    .filter(i => i >= 0 && i < awaiting.length)
-    .map(i => ({
-      threadId: awaiting[i].threadId,
-      subject: awaiting[i].subject,
-      to: awaiting[i].to,
-      date: awaiting[i].date,
-      snippet: awaiting[i].snippet,
-      type: "awaiting_reply",
-    }));
-
-  // AI要約
-  if (awaitingItems.length > 0) {
-    const summaryInput = awaitingItems.map((m, i) => {
-      const orig = awaiting.find(a => a.threadId === m.threadId);
-      return `${i}: [${m.subject}] to: ${m.to}\n${orig ? orig.snippet : ""}`;
-    }).join("\n---\n");
-
-    const summaryPrompt = `各メールで相手に何を求めているか1行（30文字以内）で要約して。JSON配列で返して。
-例: ["見積書の送付を依頼した", "契約書の確認を求めた"]
-
-${summaryInput}`;
-
-    const summaryResult = callClaude(summaryPrompt);
-    const summaries = parseJsonArray(summaryResult);
-    for (let i = 0; i < awaitingItems.length; i++) {
-      awaitingItems[i].summary = summaries[i] || "";
+    for (const j of judged) {
+      if (j.index >= 0 && j.index < batch.length) {
+        awaitingItems.push({
+          threadId: batch[j.index].threadId,
+          subject: batch[j.index].subject,
+          to: batch[j.index].to,
+          date: batch[j.index].date,
+          snippet: batch[j.index].snippet,
+          summary: j.summary || "",
+          type: "awaiting_reply",
+        });
+      }
     }
   }
 
@@ -534,9 +527,11 @@ function setupTriggers() {
     .everyHours(3)
     .create();
 
+  // 毎朝7時に返信待ちスキャン（scanEmailsの後）
   ScriptApp.newTrigger("scanAwaitingReplies")
     .timeBased()
-    .everyHours(3)
+    .everyDays(1)
+    .atHour(7)
     .create();
 
   // 毎週月曜に重複掃除
