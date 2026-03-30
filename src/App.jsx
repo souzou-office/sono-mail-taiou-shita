@@ -521,16 +521,6 @@ export default function App() {
                   }}>
                     {status.label}
                   </span>
-                  {item.priority && PRIORITY_LABELS[item.priority] && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 3,
-                      background: PRIORITY_LABELS[item.priority].bg,
-                      color: PRIORITY_LABELS[item.priority].color,
-                      whiteSpace: "nowrap",
-                    }}>
-                      P{item.priority}
-                    </span>
-                  )}
                   {item.mood && MOOD_CONFIG[item.mood] && item.mood !== "calm" && (
                     <span style={{
                       fontSize: 10, fontWeight: 500, padding: "1px 5px", borderRadius: 3,
