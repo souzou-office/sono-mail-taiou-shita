@@ -7,7 +7,7 @@
 //   BACKEND_USER_ID: バックエンドのユーザーID
 //   ALLOWED_ORIGINS: フロント側のURL（CORS用）
 
-const MODEL = "claude-sonnet-4-6-20250514";
+const MODEL = "claude-sonnet-4-6";
 const SCAN_HOURS = 48;
 const MAX_BODY_CHARS = 10000;
 const BATCH_SIZE = 10;
@@ -79,7 +79,7 @@ function doOptions(e) {
 function scanEmails() {
   const cutoff = new Date(Date.now() - SCAN_HOURS * 60 * 60 * 1000);
   const query = `after:${formatDateForSearch(cutoff)} -from:me`;
-  const threads = GmailApp.search(query, 0, 30);
+  const threads = GmailApp.search(query, 0, 200);
 
   // 未返信 or 自分の返信後に相手から新着があるスレッドを抽出
   const unreplied = [];
@@ -106,11 +106,43 @@ function scanEmails() {
     return;
   }
 
+  // --- バックエンドの学習データでスキップ ---
+  const skipList = getSkipList();
+  const skipSet = new Set(skipList.map(e => e.toLowerCase()));
+  const afterSkip = unreplied.filter(m => !skipSet.has(extractEmailAddress(m.from).toLowerCase()));
+
+  if (afterSkip.length === 0) {
+    saveItems([]);
+    return;
+  }
+
+  // --- ルールベースで明らかに不要なものを除外 ---
+  const SKIP_PATTERNS = [
+    /noreply@/i, /no-reply@/i, /mailer-daemon@/i,
+    /notification@/i, /notifications@/i, /alert@/i, /alerts@/i,
+    /news@/i, /newsletter@/i, /info@/i, /support@/i,
+    /do-not-reply@/i, /donotreply@/i,
+  ];
+  const SKIP_SUBJECTS = [
+    /unsubscribe/i, /配信停止/i, /メルマガ/i, /ニュースレター/i,
+  ];
+  const filtered = afterSkip.filter(m => {
+    const email = (m.from.match(/<(.+?)>/) || [])[1] || m.from;
+    if (SKIP_PATTERNS.some(p => p.test(email))) return false;
+    if (SKIP_SUBJECTS.some(p => p.test(m.subject))) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    saveItems([]);
+    return;
+  }
+
   // --- Claude Sonnetで判定+分析（バッチ処理） ---
   const actionItems = [];
 
-  for (let start = 0; start < unreplied.length; start += BATCH_SIZE) {
-    const batch = unreplied.slice(start, start + BATCH_SIZE);
+  for (let start = 0; start < filtered.length; start += BATCH_SIZE) {
+    const batch = filtered.slice(start, start + BATCH_SIZE);
     const mailList = batch.map((m, i) =>
       `=== メール ${i} ===\n件名: ${m.subject}\n差出人: ${m.from}\n本文:\n${m.snippet}`
     ).join("\n\n");
