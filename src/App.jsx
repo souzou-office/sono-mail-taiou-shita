@@ -128,6 +128,8 @@ export default function App() {
   useEffect(() => { loadItems(); }, []);
 
   function handleReplied(item) {
+    const ids = loadDismissedIds();
+    if (!ids.includes(item.threadId)) { ids.push(item.threadId); saveDismissedIds(ids); }
     setItems((prev) => prev ? prev.filter((it) => it.threadId !== item.threadId) : prev);
   }
 
