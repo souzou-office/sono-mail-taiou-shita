@@ -651,7 +651,7 @@ export default function App() {
           {/* ヘッダー */}
           <div className="table-header" style={{
             display: "grid",
-            gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
+            gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px 60px 60px",
             borderBottom: "1px solid #e5e5e3",
             background: "#fafaf9",
             fontSize: 11,
@@ -664,6 +664,8 @@ export default function App() {
             <div style={{ padding: "8px 12px" }}>送信先</div>
             <div style={{ padding: "8px 12px" }}>送信日時</div>
             <div style={{ padding: "8px 12px" }}>経過</div>
+            <div style={{ padding: "8px 12px" }}></div>
+            <div style={{ padding: "8px 12px" }}></div>
           </div>
 
           {awaitingItems.length === 0 && (
@@ -690,7 +692,7 @@ export default function App() {
               >
                 <div className="grid-row" style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
+                  gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px 60px 60px",
                 }}>
                   {/* 件名 + AI要約 */}
                   <div className="col-subject" style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
@@ -732,6 +734,36 @@ export default function App() {
                   {/* 経過 */}
                   <div className="col-elapsed" style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
                     {timeAgo(item.date)}
+                  </div>
+
+                  {/* 済みボタン */}
+                  <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
+                    <button
+                      className="dismiss-btn replied-btn"
+                      onClick={(e) => { e.stopPropagation(); setAwaitingItems((prev) => prev.filter((it) => it.threadId !== item.threadId)); }}
+                      title="返信が来た"
+                      style={{
+                        fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
+                        borderRadius: 4, padding: "2px 6px", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      済み
+                    </button>
+                  </div>
+
+                  {/* 不要ボタン */}
+                  <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
+                    <button
+                      className="dismiss-btn"
+                      onClick={(e) => { e.stopPropagation(); setAwaitingItems((prev) => prev.filter((it) => it.threadId !== item.threadId)); }}
+                      title="返信待ち不要"
+                      style={{
+                        fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
+                        borderRadius: 4, padding: "2px 6px", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      不要
+                    </button>
                   </div>
                 </div>
 
