@@ -8,7 +8,7 @@
 //   ALLOWED_ORIGINS: フロント側のURL（CORS用）
 
 const MODEL = "claude-sonnet-4-6";
-const SCAN_HOURS = 48;
+const SCAN_HOURS = 24;
 const MAX_BODY_CHARS = 10000;
 const BATCH_SIZE = 10;
 const MY_EMAIL = PropertiesService.getScriptProperties().getProperty("MY_EMAIL") || Session.getActiveUser().getEmail();
