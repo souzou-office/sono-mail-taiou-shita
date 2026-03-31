@@ -75,6 +75,9 @@ export default function App() {
   const [sortKey, setSortKey] = useState("priority");
   const [activeTab, setActiveTab] = useState("pending");
   const [awaitingItems, setAwaitingItems] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [watchEmails, setWatchEmails] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
 
   function loadItems() {
     if (!GAS_URL) {
@@ -124,6 +127,26 @@ export default function App() {
       .then((r) => r.json())
       .then((data) => setLearningStats(data))
       .catch(() => {});
+  }
+
+  function loadSettings() {
+    if (!GAS_URL) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=settings`)
+      .then((r) => r.json())
+      .then((data) => { setWatchEmails(data.watchEmails || ""); })
+      .catch(() => {});
+  }
+
+  function saveSettings() {
+    if (!GAS_URL) return;
+    setSavingSettings(true);
+    fetch(`${GAS_URL}?token=${API_TOKEN}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "saveSettings", watchEmails }),
+    })
+      .then(() => setSavingSettings(false))
+      .catch(() => setSavingSettings(false));
   }
 
   useEffect(() => { loadItems(); }, []);
@@ -322,6 +345,15 @@ export default function App() {
               学習状況
             </button>
             <button
+              onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadSettings(); }}
+              style={{
+                fontSize: 11, color: "#666", background: showSettings ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
+                borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+              }}
+            >
+              設定
+            </button>
+            <button
               onClick={loadItems}
               disabled={refreshing}
               className="refresh-btn"
@@ -438,6 +470,45 @@ export default function App() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ===== 設定パネル ===== */}
+        {showSettings && (
+          <div style={{
+            background: "#fff", borderRadius: 8, border: "1px solid #e5e5e3",
+            padding: 16, marginBottom: 16, animation: "fadeIn 0.2s ease",
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#333" }}>スキャン設定</div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "#666", display: "block", marginBottom: 4 }}>
+                監視メールアドレス（カンマ区切り）
+              </label>
+              <input
+                type="text"
+                value={watchEmails}
+                onChange={(e) => setWatchEmails(e.target.value)}
+                placeholder="例: ikeda@souzou-office.jp,info@souzou-office.jp"
+                style={{
+                  width: "100%", padding: "8px 12px", fontSize: 13,
+                  border: "1px solid #e5e5e3", borderRadius: 6, outline: "none",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+                空欄にすると全アドレス宛のメールをスキャンします
+              </div>
+            </div>
+            <button
+              onClick={saveSettings}
+              disabled={savingSettings}
+              style={{
+                fontSize: 12, fontWeight: 600, color: "#fff", background: "#7c5cfc",
+                border: "none", borderRadius: 6, padding: "8px 20px", cursor: "pointer",
+                opacity: savingSettings ? 0.5 : 1,
+              }}
+            >
+              {savingSettings ? "保存中..." : "保存"}
+            </button>
           </div>
         )}
 

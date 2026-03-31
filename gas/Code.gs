@@ -30,6 +30,17 @@ function unauthorized() {
 
 function doGet(e) {
   if (!checkToken(e)) return unauthorized();
+
+  // 設定取得
+  if (e && e.parameter && e.parameter.action === "settings") {
+    const settings = {
+      watchEmails: PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "",
+      scanHours: SCAN_HOURS,
+    };
+    return ContentService.createTextOutput(JSON.stringify(settings))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // アクセス時に返信済みチェック（リアルタイム性向上）
   quickReplyCheck();
   const pending = getStoredItems();
@@ -67,6 +78,22 @@ function quickReplyCheck() {
   }
 }
 
+function doPost(e) {
+  if (!checkToken(e)) return unauthorized();
+  const body = JSON.parse(e.postData.contents);
+
+  if (body.action === "saveSettings") {
+    if (body.watchEmails !== undefined) {
+      PropertiesService.getScriptProperties().setProperty("WATCH_EMAILS", body.watchEmails);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ error: "unknown action" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // CORS対応
 function doOptions(e) {
   return ContentService.createTextOutput("")
@@ -78,7 +105,12 @@ function doOptions(e) {
 // ============================================
 function scanEmails() {
   const cutoff = new Date(Date.now() - SCAN_HOURS * 60 * 60 * 1000);
-  const query = `after:${formatDateForSearch(cutoff)} -from:me`;
+  // スクリプトプロパティ WATCH_EMAILS に監視アドレスをカンマ区切りで設定（例: ikeda@souzou-office.jp,info@souzou-office.jp）
+  const watchEmails = (PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "").split(",").map(e => e.trim()).filter(Boolean);
+  const toQuery = watchEmails.length > 0
+    ? `{${watchEmails.map(e => `to:${e}`).join(" ")}}`
+    : "";
+  const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery} category:primary`;
   const threads = GmailApp.search(query, 0, 200);
 
   // 未返信 or 自分の返信後に相手から新着があるスレッドを抽出
