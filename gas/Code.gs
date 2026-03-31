@@ -8,7 +8,7 @@
 //   ALLOWED_ORIGINS: フロント側のURL（CORS用）
 
 const MODEL = "claude-sonnet-4-6";
-const SCAN_HOURS = 48;
+const SCAN_HOURS = 24;
 const MAX_BODY_CHARS = 10000;
 const BATCH_SIZE = 10;
 const MY_EMAIL = PropertiesService.getScriptProperties().getProperty("MY_EMAIL") || Session.getActiveUser().getEmail();
@@ -110,7 +110,7 @@ function scanEmails() {
   const toQuery = watchEmails.length > 0
     ? `{${watchEmails.map(e => `to:${e}`).join(" ")}}`
     : "";
-  const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery} category:primary`;
+  const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery}`;
   console.log("検索クエリ: " + query);
   const threads = GmailApp.search(query, 0, 200);
   console.log("Gmail検索結果: " + threads.length + "件");
