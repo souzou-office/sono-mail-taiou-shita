@@ -110,7 +110,7 @@ function scanEmails() {
   const toQuery = watchEmails.length > 0
     ? `{${watchEmails.map(e => `to:${e}`).join(" ")}}`
     : "";
-  const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery} category:primary`;
+  const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery}`;
   console.log("検索クエリ: " + query);
   const threads = GmailApp.search(query, 0, 200);
   console.log("Gmail検索結果: " + threads.length + "件");
