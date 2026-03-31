@@ -111,7 +111,9 @@ function scanEmails() {
     ? `{${watchEmails.map(e => `to:${e}`).join(" ")}}`
     : "";
   const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery} category:primary`;
+  console.log("検索クエリ: " + query);
   const threads = GmailApp.search(query, 0, 200);
+  console.log("Gmail検索結果: " + threads.length + "件");
 
   // 未返信 or 自分の返信後に相手から新着があるスレッドを抽出
   const unreplied = [];
@@ -133,7 +135,9 @@ function scanEmails() {
     });
   }
 
+  console.log("未返信: " + unreplied.length + "件");
   if (unreplied.length === 0) {
+    console.log("未返信0件のため終了");
     saveItems([]);
     return;
   }
