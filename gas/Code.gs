@@ -133,6 +133,8 @@ function scanEmails() {
     return true;
   });
 
+  console.log(`スキャン結果: Gmail ${threads.length}件 → 未返信 ${unreplied.length}件 → スキップリスト後 ${afterSkip.length}件 → ルールフィルタ後 ${filtered.length}件 → AIに送信`);
+
   if (filtered.length === 0) {
     saveItems([]);
     return;
@@ -209,6 +211,8 @@ ${mailList}`;
       }
     }
   }
+
+  console.log(`AI判定結果: ${actionItems.length}件が返信必要`);
 
   // 既存データとマージ（古いのも残す）
   const existing = getStoredItems();
