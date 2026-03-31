@@ -99,7 +99,8 @@ export default function App() {
         const dismissedIds = loadDismissedIds();
         const pending = (data.pending || data).filter((it) => !dismissedIds.includes(it.threadId));
         setItems(pending);
-        setAwaitingItems(data.awaiting || []);
+        const dismissedAwaitingIds = loadDismissedAwaitingIds();
+        setAwaitingItems((data.awaiting || []).filter((it) => !dismissedAwaitingIds.includes(it.threadId)));
         setError(null);
       })
       .catch(() => setError("取得できませんでした"))
@@ -152,6 +153,21 @@ export default function App() {
 
   function saveDismissedIds(ids) {
     try { localStorage.setItem("dismissed_threads", JSON.stringify(ids)); } catch (e) {}
+  }
+
+  function loadDismissedAwaitingIds() {
+    try { return JSON.parse(localStorage.getItem("dismissed_awaiting") || "[]"); } catch (e) { return []; }
+  }
+
+  function saveDismissedAwaitingIds(ids) {
+    try { localStorage.setItem("dismissed_awaiting", JSON.stringify(ids)); } catch (e) {}
+  }
+
+  function dismissAwaiting(e, threadId) {
+    e.stopPropagation();
+    const ids = loadDismissedAwaitingIds();
+    if (!ids.includes(threadId)) { ids.push(threadId); saveDismissedAwaitingIds(ids); }
+    setAwaitingItems((prev) => prev.filter((it) => it.threadId !== threadId));
   }
 
   function loadDismissedIds() {
@@ -740,7 +756,7 @@ export default function App() {
                   <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
                     <button
                       className="dismiss-btn replied-btn"
-                      onClick={(e) => { e.stopPropagation(); setAwaitingItems((prev) => prev.filter((it) => it.threadId !== item.threadId)); }}
+                      onClick={(e) => dismissAwaiting(e, item.threadId)}
                       title="返信が来た"
                       style={{
                         fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
@@ -755,7 +771,7 @@ export default function App() {
                   <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
                     <button
                       className="dismiss-btn"
-                      onClick={(e) => { e.stopPropagation(); setAwaitingItems((prev) => prev.filter((it) => it.threadId !== item.threadId)); }}
+                      onClick={(e) => dismissAwaiting(e, item.threadId)}
                       title="返信待ち不要"
                       style={{
                         fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
