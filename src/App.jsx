@@ -140,12 +140,9 @@ export default function App() {
   function saveSettings() {
     if (!GAS_URL) return;
     setSavingSettings(true);
-    fetch(`${GAS_URL}?token=${API_TOKEN}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "saveSettings", watchEmails }),
-    })
-      .then(() => setSavingSettings(false))
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=saveSettings&watchEmails=${encodeURIComponent(watchEmails)}`)
+      .then((r) => r.json())
+      .then(() => { setSavingSettings(false); alert("保存しました"); })
       .catch(() => setSavingSettings(false));
   }
 
