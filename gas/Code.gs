@@ -78,7 +78,12 @@ function doOptions(e) {
 // ============================================
 function scanEmails() {
   const cutoff = new Date(Date.now() - SCAN_HOURS * 60 * 60 * 1000);
-  const query = `after:${formatDateForSearch(cutoff)} -from:me`;
+  // スクリプトプロパティ WATCH_EMAILS に監視アドレスをカンマ区切りで設定（例: ikeda@souzou-office.jp,info@souzou-office.jp）
+  const watchEmails = (PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "").split(",").map(e => e.trim()).filter(Boolean);
+  const toQuery = watchEmails.length > 0
+    ? `{${watchEmails.map(e => `to:${e}`).join(" ")}}`
+    : "";
+  const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery} category:primary`;
   const threads = GmailApp.search(query, 0, 200);
 
   // 未返信 or 自分の返信後に相手から新着があるスレッドを抽出
