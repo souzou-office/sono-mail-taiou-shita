@@ -31,6 +31,15 @@ function unauthorized() {
 function doGet(e) {
   if (!checkToken(e)) return unauthorized();
 
+  // 設定保存
+  if (e && e.parameter && e.parameter.action === "saveSettings") {
+    if (e.parameter.watchEmails !== undefined) {
+      PropertiesService.getScriptProperties().setProperty("WATCH_EMAILS", e.parameter.watchEmails);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // 設定取得
   if (e && e.parameter && e.parameter.action === "settings") {
     const settings = {
