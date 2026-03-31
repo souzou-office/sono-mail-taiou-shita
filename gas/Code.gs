@@ -50,6 +50,39 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // 学習: 不要な送信者を登録
+  if (e && e.parameter && e.parameter.action === "learn") {
+    const senderEmail = e.parameter.senderEmail || "";
+    if (senderEmail) {
+      const learned = getLearnedPatterns();
+      const existing = learned.find(p => p.senderEmail === senderEmail);
+      if (existing) {
+        existing.hitCount++;
+      } else {
+        learned.push({ senderEmail, result: "返信不要", hitCount: 1 });
+      }
+      saveLearnedPatterns(learned);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 学習状況取得
+  if (e && e.parameter && e.parameter.action === "learningStats") {
+    const learned = getLearnedPatterns();
+    const confirmed = learned.filter(p => p.hitCount >= 3);
+    const stats = {
+      learnedPatterns: {
+        total: learned.length,
+        confirmed: confirmed.length,
+        items: learned.sort((a, b) => b.hitCount - a.hitCount).slice(0, 20),
+      },
+      feedbackCount: learned.reduce((sum, p) => sum + p.hitCount, 0),
+    };
+    return ContentService.createTextOutput(JSON.stringify(stats))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // アクセス時に返信済みチェック（リアルタイム性向上）
   quickReplyCheck();
   const pending = getStoredItems();
@@ -161,6 +194,16 @@ function scanEmails() {
     return;
   }
 
+  // --- 学習データでスキップ（3回以上「不要」にした送信者を自動除外） ---
+  const learned = getLearnedPatterns();
+  const learnedSkip = new Set(learned.filter(p => p.hitCount >= 3).map(p => p.senderEmail.toLowerCase()));
+  const afterLearned = afterSkip.filter(m => !learnedSkip.has(extractEmailAddress(m.from).toLowerCase()));
+
+  if (afterLearned.length === 0) {
+    saveItems([]);
+    return;
+  }
+
   // --- ルールベースで明らかに不要なものを除外 ---
   const SKIP_PATTERNS = [
     /noreply@/i, /no-reply@/i, /mailer-daemon@/i,
@@ -171,14 +214,14 @@ function scanEmails() {
   const SKIP_SUBJECTS = [
     /unsubscribe/i, /配信停止/i, /メルマガ/i, /ニュースレター/i,
   ];
-  const filtered = afterSkip.filter(m => {
+  const filtered = afterLearned.filter(m => {
     const email = (m.from.match(/<(.+?)>/) || [])[1] || m.from;
     if (SKIP_PATTERNS.some(p => p.test(email))) return false;
     if (SKIP_SUBJECTS.some(p => p.test(m.subject))) return false;
     return true;
   });
 
-  console.log(`スキャン結果: Gmail ${threads.length}件 → 未返信 ${unreplied.length}件 → スキップリスト後 ${afterSkip.length}件 → ルールフィルタ後 ${filtered.length}件 → AIに送信`);
+  console.log(`スキャン結果: Gmail ${threads.length}件 → 未返信 ${unreplied.length}件 → スキップリスト後 ${afterSkip.length}件 → 学習除外後 ${afterLearned.length}件 → ルールフィルタ後 ${filtered.length}件 → AIに送信`);
 
   if (filtered.length === 0) {
     saveItems([]);
@@ -516,6 +559,16 @@ function getStoredItems() {
 
 function saveItems(items) {
   PropertiesService.getScriptProperties().setProperty("email_items", JSON.stringify(items));
+}
+
+function getLearnedPatterns() {
+  const raw = PropertiesService.getScriptProperties().getProperty("learned_patterns");
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function saveLearnedPatterns(patterns) {
+  PropertiesService.getScriptProperties().setProperty("learned_patterns", JSON.stringify(patterns.slice(-500)));
 }
 
 function getAwaitingItems() {

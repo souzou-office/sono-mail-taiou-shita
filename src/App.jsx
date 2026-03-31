@@ -111,21 +111,16 @@ export default function App() {
   }
 
   function loadLearningStats() {
-    if (!API_URL) {
-      setLearningStats({
-        learnedPatterns: { total: 3, confirmed: 1, items: [
-          { senderEmail: "noreply@github.com", result: "返信不要", hitCount: 5, confirmed: true },
-          { senderEmail: "tanaka@example.com", result: "返信必要", hitCount: 2, confirmed: false },
-          { senderEmail: "info@newsletter.jp", result: "返信不要", hitCount: 1, confirmed: false },
-        ]},
-        senderCategories: { total: 4, breakdown: { HUMAN: 2, NEWSLETTER: 1, NOTIFICATION: 1 } },
-        feedbackCount: 7,
-      });
-      return;
-    }
-    fetch(`${API_URL}/learning-stats?userId=demo`)
+    if (!GAS_URL) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=learningStats`)
       .then((r) => r.json())
       .then((data) => setLearningStats(data))
+      .catch(() => {});
+  }
+
+  function learnSender(senderEmail) {
+    if (!GAS_URL || !senderEmail) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=learn&senderEmail=${encodeURIComponent(senderEmail)}`)
       .catch(() => {});
   }
 
@@ -198,19 +193,7 @@ export default function App() {
     const target = item || undoItem;
     if (!target) return;
 
-    if (API_URL) {
-      fetch(`${API_URL}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: "demo",
-          messageId: target.messageId,
-          threadId: target.threadId,
-          senderEmail: extractEmail(target.from),
-          needsReply: false,
-        }),
-      }).catch(() => {});
-    }
+    learnSender(extractEmail(target.from));
 
     const ids = loadDismissedIds();
     if (!ids.includes(target.threadId)) { ids.push(target.threadId); saveDismissedIds(ids); }
@@ -429,42 +412,18 @@ export default function App() {
                 <span style={{ color: "#999" }}>フィードバック数: </span>
                 <span style={{ fontWeight: 600 }}>{learningStats.feedbackCount}回</span>
               </div>
-              <div>
-                <span style={{ color: "#999" }}>送信者分類: </span>
-                <span style={{ fontWeight: 600 }}>{learningStats.senderCategories.total}件</span>
-              </div>
             </div>
 
             {learningStats.learnedPatterns.items.length > 0 && (
               <div style={{ fontSize: 12, color: "#555" }}>
-                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>学習済み送信者</div>
+                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>学習済み送信者（3回以上で自動除外）</div>
                 {learningStats.learnedPatterns.items.map((p, i) => (
                   <div key={i} style={{ display: "flex", gap: 12, padding: "3px 0", alignItems: "center" }}>
                     <span style={{ minWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.senderEmail}</span>
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 3,
-                      background: p.result === "返信必要" ? "#e8f4f8" : "#f5f5f4",
-                      color: p.result === "返信必要" ? "#2b6cb0" : "#888",
-                    }}>
-                      {p.result}
-                    </span>
                     <span style={{ color: "#bbb" }}>{p.hitCount}回</span>
-                    {p.confirmed && <span style={{ color: "#16a34a", fontSize: 10, fontWeight: 600 }}>確定</span>}
+                    {p.hitCount >= 3 && <span style={{ color: "#16a34a", fontSize: 10, fontWeight: 600 }}>自動除外中</span>}
                   </div>
                 ))}
-              </div>
-            )}
-
-            {Object.keys(learningStats.senderCategories.breakdown).length > 0 && (
-              <div style={{ fontSize: 12, color: "#555", marginTop: 12 }}>
-                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>送信者カテゴリ内訳</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {Object.entries(learningStats.senderCategories.breakdown).map(([cat, count]) => (
-                    <span key={cat} style={{ background: "#f5f5f4", padding: "2px 8px", borderRadius: 4, fontSize: 11 }}>
-                      {cat}: {count}
-                    </span>
-                  ))}
-                </div>
               </div>
             )}
           </div>
