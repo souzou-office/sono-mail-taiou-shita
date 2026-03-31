@@ -30,6 +30,17 @@ function unauthorized() {
 
 function doGet(e) {
   if (!checkToken(e)) return unauthorized();
+
+  // 設定取得
+  if (e && e.parameter && e.parameter.action === "settings") {
+    const settings = {
+      watchEmails: PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "",
+      scanHours: SCAN_HOURS,
+    };
+    return ContentService.createTextOutput(JSON.stringify(settings))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // アクセス時に返信済みチェック（リアルタイム性向上）
   quickReplyCheck();
   const pending = getStoredItems();
@@ -65,6 +76,22 @@ function quickReplyCheck() {
   if (changed) {
     saveItems(items);
   }
+}
+
+function doPost(e) {
+  if (!checkToken(e)) return unauthorized();
+  const body = JSON.parse(e.postData.contents);
+
+  if (body.action === "saveSettings") {
+    if (body.watchEmails !== undefined) {
+      PropertiesService.getScriptProperties().setProperty("WATCH_EMAILS", body.watchEmails);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ error: "unknown action" }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // CORS対応
