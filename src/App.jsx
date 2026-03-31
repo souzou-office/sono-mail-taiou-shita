@@ -146,7 +146,7 @@ export default function App() {
       .catch(() => setSavingSettings(false));
   }
 
-  useEffect(() => { loadItems(); }, []);
+  useEffect(() => { loadItems(); loadSettings(); }, []);
 
   function handleReplied(item) {
     const ids = loadDismissedIds();
