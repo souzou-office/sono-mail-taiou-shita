@@ -99,11 +99,8 @@ export default function App() {
     fetch(`${GAS_URL}?token=${API_TOKEN}`)
       .then((r) => r.json())
       .then((data) => {
-        const dismissedIds = loadDismissedIds();
-        const pending = (data.pending || data).filter((it) => !dismissedIds.includes(it.threadId));
-        setItems(pending);
-        const dismissedAwaitingIds = loadDismissedAwaitingIds();
-        setAwaitingItems((data.awaiting || []).filter((it) => !dismissedAwaitingIds.includes(it.threadId)));
+        setItems(data.pending || data);
+        setAwaitingItems(data.awaiting || []);
         setError(null);
       })
       .catch(() => setError("取得できませんでした"))
@@ -143,14 +140,18 @@ export default function App() {
 
   useEffect(() => { loadItems(); loadSettings(); }, []);
 
+  function dismissToGAS(threadId, type) {
+    if (!GAS_URL) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=dismiss&threadId=${encodeURIComponent(threadId)}&type=${type}`)
+      .catch(() => {});
+  }
+
   function handleReplied(item) {
-    const ids = loadDismissedIds();
-    if (!ids.includes(item.threadId)) { ids.push(item.threadId); saveDismissedIds(ids); }
+    dismissToGAS(item.threadId, "pending");
     setItems((prev) => prev ? prev.filter((it) => it.threadId !== item.threadId) : prev);
   }
 
   function handleDismiss(item) {
-    // 前のundoタイマーがあれば確定させる
     if (undoTimer) {
       clearTimeout(undoTimer);
       confirmDismiss();
@@ -159,34 +160,16 @@ export default function App() {
     setDismissed((prev) => ({ ...prev, [item.threadId]: true }));
     setUndoItem(item);
 
-    // 5秒後に確定（API送信）
     const timer = setTimeout(() => {
       confirmDismiss(item);
     }, 5000);
     setUndoTimer(timer);
   }
 
-  function saveDismissedIds(ids) {
-    try { localStorage.setItem("dismissed_threads", JSON.stringify(ids)); } catch (e) {}
-  }
-
-  function loadDismissedAwaitingIds() {
-    try { return JSON.parse(localStorage.getItem("dismissed_awaiting") || "[]"); } catch (e) { return []; }
-  }
-
-  function saveDismissedAwaitingIds(ids) {
-    try { localStorage.setItem("dismissed_awaiting", JSON.stringify(ids)); } catch (e) {}
-  }
-
   function dismissAwaiting(e, threadId) {
     e.stopPropagation();
-    const ids = loadDismissedAwaitingIds();
-    if (!ids.includes(threadId)) { ids.push(threadId); saveDismissedAwaitingIds(ids); }
+    dismissToGAS(threadId, "awaiting");
     setAwaitingItems((prev) => prev.filter((it) => it.threadId !== threadId));
-  }
-
-  function loadDismissedIds() {
-    try { return JSON.parse(localStorage.getItem("dismissed_threads") || "[]"); } catch (e) { return []; }
   }
 
   function confirmDismiss(item) {
@@ -194,9 +177,7 @@ export default function App() {
     if (!target) return;
 
     learnSender(extractEmail(target.from));
-
-    const ids = loadDismissedIds();
-    if (!ids.includes(target.threadId)) { ids.push(target.threadId); saveDismissedIds(ids); }
+    dismissToGAS(target.threadId, "pending");
 
     setItems((prev) => prev ? prev.filter((it) => it.threadId !== target.threadId) : prev);
     setDismissed((prev) => { const next = { ...prev }; delete next[target.threadId]; return next; });
