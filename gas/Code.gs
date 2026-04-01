@@ -83,11 +83,32 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // スレッド除外（済み・不要）
+  if (e && e.parameter && e.parameter.action === "dismiss") {
+    const threadId = e.parameter.threadId || "";
+    const type = e.parameter.type || "pending"; // "pending" or "awaiting"
+    if (threadId) {
+      const key = type === "awaiting" ? "dismissed_awaiting" : "dismissed_threads";
+      const ids = getDismissedIds(key);
+      if (!ids.includes(threadId)) {
+        ids.push(threadId);
+        saveDismissedIds(key, ids);
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // アクセス時に返信済みチェック（リアルタイム性向上）
   quickReplyCheck();
   const pending = getStoredItems();
   const awaiting = getAwaitingItems();
-  const output = ContentService.createTextOutput(JSON.stringify({ pending, awaiting }))
+  const dismissedPending = getDismissedIds("dismissed_threads");
+  const dismissedAwaiting = getDismissedIds("dismissed_awaiting");
+  const output = ContentService.createTextOutput(JSON.stringify({
+    pending: pending.filter(i => !dismissedPending.includes(i.threadId)),
+    awaiting: awaiting.filter(i => !dismissedAwaiting.includes(i.threadId)),
+  }))
     .setMimeType(ContentService.MimeType.JSON);
   return output;
 }
@@ -569,6 +590,16 @@ function getLearnedPatterns() {
 
 function saveLearnedPatterns(patterns) {
   PropertiesService.getScriptProperties().setProperty("learned_patterns", JSON.stringify(patterns.slice(-500)));
+}
+
+function getDismissedIds(key) {
+  const raw = PropertiesService.getScriptProperties().getProperty(key);
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function saveDismissedIds(key, ids) {
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(ids.slice(-500)));
 }
 
 function getAwaitingItems() {
