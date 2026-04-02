@@ -7,22 +7,95 @@
 //   BACKEND_USER_ID: バックエンドのユーザーID
 //   ALLOWED_ORIGINS: フロント側のURL（CORS用）
 
-const HAIKU_MODEL = "claude-haiku-4-5-20251001";
-const SCAN_HOURS = 48; // 過去何時間をスキャン
-const MY_EMAIL = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+const MODEL = "claude-sonnet-4-6";
+const SCAN_HOURS = 24;
+const MAX_BODY_CHARS = 10000;
+const BATCH_SIZE = 10;
+const MY_EMAIL = PropertiesService.getScriptProperties().getProperty("MY_EMAIL") || Session.getActiveUser().getEmail();
 
 // ============================================
 // Web API（フロント用）
 // ============================================
-const ACCESS_TOKEN = PropertiesService.getScriptProperties().getProperty("ACCESS_TOKEN") || "";
+function checkToken(e) {
+  const token = PropertiesService.getScriptProperties().getProperty("API_TOKEN");
+  if (!token) return true;
+  const given = (e && e.parameter && e.parameter.token) || "";
+  return given === token;
+}
 
-// ============================================
-// Web API（フロント用）
-// ============================================
+function unauthorized() {
+  return ContentService.createTextOutput(JSON.stringify({ error: "unauthorized" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 function doGet(e) {
-  // トークン認証
-  if (ACCESS_TOKEN && (!e || !e.parameter || e.parameter.token !== ACCESS_TOKEN)) {
-    return ContentService.createTextOutput(JSON.stringify({ error: "Unauthorized" }))
+  if (!checkToken(e)) return unauthorized();
+
+  // 設定保存
+  if (e && e.parameter && e.parameter.action === "saveSettings") {
+    if (e.parameter.watchEmails !== undefined) {
+      PropertiesService.getScriptProperties().setProperty("WATCH_EMAILS", e.parameter.watchEmails);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 設定取得
+  if (e && e.parameter && e.parameter.action === "settings") {
+    const settings = {
+      watchEmails: PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "",
+      scanHours: SCAN_HOURS,
+    };
+    return ContentService.createTextOutput(JSON.stringify(settings))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 学習: 不要な送信者を登録
+  if (e && e.parameter && e.parameter.action === "learn") {
+    const senderEmail = e.parameter.senderEmail || "";
+    if (senderEmail) {
+      const learned = getLearnedPatterns();
+      const existing = learned.find(p => p.senderEmail === senderEmail);
+      if (existing) {
+        existing.hitCount++;
+      } else {
+        learned.push({ senderEmail, result: "返信不要", hitCount: 1 });
+      }
+      saveLearnedPatterns(learned);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // 学習状況取得
+  if (e && e.parameter && e.parameter.action === "learningStats") {
+    const learned = getLearnedPatterns();
+    const confirmed = learned.filter(p => p.hitCount >= 3);
+    const stats = {
+      learnedPatterns: {
+        total: learned.length,
+        confirmed: confirmed.length,
+        items: learned.sort((a, b) => b.hitCount - a.hitCount).slice(0, 20),
+      },
+      feedbackCount: learned.reduce((sum, p) => sum + p.hitCount, 0),
+    };
+    return ContentService.createTextOutput(JSON.stringify(stats))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // スレッド除外（済み・不要）
+  if (e && e.parameter && e.parameter.action === "dismiss") {
+    const threadId = e.parameter.threadId || "";
+    const type = e.parameter.type || "pending"; // "pending" or "awaiting"
+    if (threadId) {
+      const key = type === "awaiting" ? "dismissed_awaiting" : "dismissed_threads";
+      const ids = getDismissedIds(key);
+      if (!ids.includes(threadId)) {
+        ids.push(threadId);
+        saveDismissedIds(key, ids);
+      }
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -30,7 +103,12 @@ function doGet(e) {
   quickReplyCheck();
   const pending = getStoredItems();
   const awaiting = getAwaitingItems();
-  const output = ContentService.createTextOutput(JSON.stringify({ pending, awaiting }))
+  const dismissedPending = getDismissedIds("dismissed_threads");
+  const dismissedAwaiting = getDismissedIds("dismissed_awaiting");
+  const output = ContentService.createTextOutput(JSON.stringify({
+    pending: pending.filter(i => !dismissedPending.includes(i.threadId)),
+    awaiting: awaiting.filter(i => !dismissedAwaiting.includes(i.threadId)),
+  }))
     .setMimeType(ContentService.MimeType.JSON);
   return output;
 }
@@ -63,6 +141,22 @@ function quickReplyCheck() {
   }
 }
 
+function doPost(e) {
+  if (!checkToken(e)) return unauthorized();
+  const body = JSON.parse(e.postData.contents);
+
+  if (body.action === "saveSettings") {
+    if (body.watchEmails !== undefined) {
+      PropertiesService.getScriptProperties().setProperty("WATCH_EMAILS", body.watchEmails);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ error: "unknown action" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
 // CORS対応
 function doOptions(e) {
   return ContentService.createTextOutput("")
@@ -74,8 +168,15 @@ function doOptions(e) {
 // ============================================
 function scanEmails() {
   const cutoff = new Date(Date.now() - SCAN_HOURS * 60 * 60 * 1000);
-  const query = `after:${formatDateForSearch(cutoff)} -from:me`;
-  const threads = GmailApp.search(query, 0, 100);
+  // スクリプトプロパティ WATCH_EMAILS に監視アドレスをカンマ区切りで設定（例: ikeda@souzou-office.jp,info@souzou-office.jp）
+  const watchEmails = (PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "").split(",").map(e => e.trim()).filter(Boolean);
+  const toQuery = watchEmails.length > 0
+    ? `{${watchEmails.map(e => `to:${e}`).join(" ")}}`
+    : "";
+  const query = `after:${formatDateForSearch(cutoff)} -from:me ${toQuery}`;
+  console.log("検索クエリ: " + query);
+  const threads = GmailApp.search(query, 0, 200);
+  console.log("Gmail検索結果: " + threads.length + "件");
 
   // 未返信 or 自分の返信後に相手から新着があるスレッドを抽出
   const unreplied = [];
@@ -93,16 +194,18 @@ function scanEmails() {
       subject: thread.getFirstMessageSubject(),
       from: latest.getFrom(),
       date: latest.getDate().toISOString(),
-      snippet: latest.getPlainBody().substring(0, 2000),
+      snippet: latest.getPlainBody().substring(0, MAX_BODY_CHARS),
     });
   }
 
+  console.log("未返信: " + unreplied.length + "件");
   if (unreplied.length === 0) {
+    console.log("未返信0件のため終了");
     saveItems([]);
     return;
   }
 
-  // --- 0段目: バックエンドの学習データでスキップ ---
+  // --- バックエンドの学習データでスキップ ---
   const skipList = getSkipList();
   const skipSet = new Set(skipList.map(e => e.toLowerCase()));
   const afterSkip = unreplied.filter(m => !skipSet.has(extractEmailAddress(m.from).toLowerCase()));
@@ -112,59 +215,79 @@ function scanEmails() {
     return;
   }
 
-  // --- 1段目: Haikuでタイトル一括フィルタ ---
-  const titles = afterSkip.map((m, i) => `${i}: ${m.subject}（${m.from}）`).join("\n");
-  const filterPrompt = `メルマガや自動通知など明らかに返信不要なものの番号をJSON配列で返して。迷ったら残して。
+  // --- 学習データでスキップ（3回以上「不要」にした送信者を自動除外） ---
+  const learned = getLearnedPatterns();
+  const learnedSkip = new Set(learned.filter(p => p.hitCount >= 3).map(p => p.senderEmail.toLowerCase()));
+  const afterLearned = afterSkip.filter(m => !learnedSkip.has(extractEmailAddress(m.from).toLowerCase()));
 
-${titles}`;
-
-  const filterResult = callHaiku(filterPrompt);
-  const excludeIndices = parseJsonArray(filterResult);
-
-  const remaining = afterSkip.filter((_, i) => !excludeIndices.includes(i));
-
-  if (remaining.length === 0) {
+  if (afterLearned.length === 0) {
     saveItems([]);
     return;
   }
 
-  // --- 2段目: Haikuで要対応判定 ---
-  const details = remaining.map((m, i) =>
-    `${i}: [${m.subject}] from: ${m.from}\n${m.snippet}`
-  ).join("\n---\n");
+  // --- ルールベースで明らかに不要なものを除外 ---
+  const SKIP_PATTERNS = [
+    /noreply@/i, /no-reply@/i, /mailer-daemon@/i,
+    /notification@/i, /notifications@/i, /alert@/i, /alerts@/i,
+    /news@/i, /newsletter@/i, /info@/i, /support@/i,
+    /do-not-reply@/i, /donotreply@/i,
+  ];
+  const SKIP_SUBJECTS = [
+    /unsubscribe/i, /配信停止/i, /メルマガ/i, /ニュースレター/i,
+  ];
+  const filtered = afterLearned.filter(m => {
+    const email = (m.from.match(/<(.+?)>/) || [])[1] || m.from;
+    if (SKIP_PATTERNS.some(p => p.test(email))) return false;
+    if (SKIP_SUBJECTS.some(p => p.test(m.subject))) return false;
+    return true;
+  });
 
-  const judgePrompt = `返信が必要なものの番号をJSON配列で返して。
+  console.log(`スキャン結果: Gmail ${threads.length}件 → 未返信 ${unreplied.length}件 → スキップリスト後 ${afterSkip.length}件 → 学習除外後 ${afterLearned.length}件 → ルールフィルタ後 ${filtered.length}件 → AIに送信`);
 
-${details}`;
+  if (filtered.length === 0) {
+    saveItems([]);
+    return;
+  }
 
-  const judgeResult = callHaiku(judgePrompt);
-  const actionIndices = parseJsonArray(judgeResult);
+  // --- Claude Sonnetで判定+分析（バッチ処理） ---
+  const actionItems = [];
 
-  const actionItems = actionIndices
-    .filter(i => i >= 0 && i < remaining.length)
-    .map(i => ({
-      threadId: remaining[i].threadId,
-      subject: remaining[i].subject,
-      from: remaining[i].from,
-      date: remaining[i].date,
-      snippet: remaining[i].snippet,
-    }));
+  for (let start = 0; start < filtered.length; start += BATCH_SIZE) {
+    const batch = filtered.slice(start, start + BATCH_SIZE);
+    const mailList = batch.map((m, i) =>
+      `=== メール ${i} ===\n件名: ${m.subject}\n差出人: ${m.from}\n本文:\n${m.snippet}`
+    ).join("\n\n");
 
-  // --- 3段目: AI分析（要約・優先度・アクションアイテム・感情） ---
-  if (actionItems.length > 0) {
-    const summaryInput = actionItems.map((m, i) =>
-      `${i}: [${m.subject}] from: ${m.from}\n${m.snippet.substring(0, 500)}`
-    ).join("\n---\n");
+    const prompt = `あなたはメールの仕分けアシスタントです。
+以下のメールを読んで、「自分が返信しないといけないもの」だけを選んでください。
 
-    const analysisPrompt = `各メールを分析してJSON配列で返して。
-各要素は以下の形式:
-{
+【返信が必要】
+- 質問されている（「いかがでしょうか？」「ご確認ください」「ご都合は？」など）
+- 日程調整を求められている
+- 承認・確認・判断を求められている
+- 何かを依頼されている
+- 見積もりや提案への回答を求められている
+
+【返信不要（除外する）】
+- メルマガ、ニュースレター、自動通知、広告
+- noreply@やno-reply@からのメール
+- 「よろしくお願いします」「ありがとうございます」「承知しました」「了解です」だけのメール
+- 一方的な報告・共有で、返信を求めていないもの
+- 挨拶やお礼だけで終わっているメール
+- サービスからの通知（注文確認、発送通知、パスワードリセットなど）
+
+厳しめに判定してください。本当に返信が必要なものだけ選んでください。
+迷ったら除外してください。
+
+返信が必要なメールについて、以下の形式のJSON配列で返してください。該当なしなら[]を返してください。
+[{
+  "index": メール番号,
   "summary": "要点を1行30文字以内",
-  "action": "具体的にやるべきこと（例: 見積書を確認して承認可否を返信）。不要ならnull",
-  "deadline": "期限があれば記載（例: 今週金曜）。なければnull",
+  "action": "具体的にやるべきこと。不要ならnull",
+  "deadline": "期限があれば記載。なければnull",
   "priority": 1〜5の数値,
-  "mood": "相手の感情（calm/urgent/frustrated/formal/friendly）"
-}
+  "mood": "calm/urgent/frustrated/formal/friendly"
+}]
 
 priorityの基準:
 5=今すぐ対応（期限切れ・怒っている・緊急）
@@ -173,21 +296,32 @@ priorityの基準:
 2=急がない（参考情報・軽い相談）
 1=ほぼ不要（CC共有・FYI）
 
-${summaryInput}`;
+${mailList}`;
 
-    const analysisResult = callHaiku(analysisPrompt);
-    const parsed = parseJsonArrayOfObjects(analysisResult);
+    const result = callClaude(prompt);
+    const match = result.match(/\[[\s\S]*\]/);
+    let judged = [];
+    try { judged = JSON.parse(match[0]); } catch { judged = []; }
 
-    for (let i = 0; i < actionItems.length; i++) {
-      if (parsed[i]) {
-        actionItems[i].summary = parsed[i].summary || "";
-        actionItems[i].action = parsed[i].action || null;
-        actionItems[i].deadline = parsed[i].deadline || null;
-        actionItems[i].priority = parsed[i].priority || 3;
-        actionItems[i].mood = parsed[i].mood || "calm";
+    for (const j of judged) {
+      if (j.index >= 0 && j.index < batch.length) {
+        actionItems.push({
+          threadId: batch[j.index].threadId,
+          subject: batch[j.index].subject,
+          from: batch[j.index].from,
+          date: batch[j.index].date,
+          snippet: batch[j.index].snippet.substring(0, 500),
+          summary: j.summary || "",
+          action: j.action || null,
+          deadline: j.deadline || null,
+          priority: j.priority || 3,
+          mood: j.mood || "calm",
+        });
       }
     }
   }
+
+  console.log(`AI判定結果: ${actionItems.length}件が返信必要`);
 
   // 既存データとマージ（古いのも残す）
   const existing = getStoredItems();
@@ -231,7 +365,7 @@ function checkReplies() {
         needsJudgment.push({
           ...item,
           date: latestDate,
-          snippet: latest.getPlainBody().substring(0, 2000),
+          snippet: latest.getPlainBody().substring(0, MAX_BODY_CHARS),
           from: latest.getFrom(),
         });
       } else {
@@ -252,7 +386,7 @@ function checkReplies() {
 
 ${details}`;
 
-    const result = callHaiku(prompt);
+    const result = callClaude(prompt);
     const actionIndices = parseJsonArray(result);
 
     for (const i of actionIndices) {
@@ -301,51 +435,44 @@ function scanAwaitingReplies() {
     });
   }
 
-  // AI判定: 返信を期待しているメールだけ残す
+  // AI判定+要約を1回で
   if (awaiting.length === 0) {
     saveAwaitingItems([]);
     return;
   }
 
-  const details = awaiting.map((m, i) =>
-    `${i}: [${m.subject}] to: ${m.to}\n${m.snippet}`
-  ).join("\n---\n");
+  const awaitingItems = [];
+  for (let start = 0; start < awaiting.length; start += BATCH_SIZE) {
+    const batch = awaiting.slice(start, start + BATCH_SIZE);
+    const details = batch.map((m, i) =>
+      `=== メール ${i} ===\n件名: ${m.subject}\n宛先: ${m.to}\n本文:\n${m.snippet}`
+    ).join("\n\n");
 
-  const prompt = `以下は自分が送ったメールです。相手からの返信を待っているものの番号をJSON配列で返して。
-情報共有や挨拶だけのメールは除外して。質問・依頼・確認を含むものだけ残して。
+    const prompt = `以下は自分が送ったメールです。相手からの返信を待っているものだけ選んでください。
+情報共有や挨拶だけのメールは除外。質問・依頼・確認を含むものだけ残して。
+
+返信待ちのメールについてJSON配列で返してください。該当なしなら[]。
+[{"index": 番号, "summary": "相手に何を求めているか1行30文字以内"}]
 
 ${details}`;
 
-  const result = callHaiku(prompt);
-  const indices = parseJsonArray(result);
+    const result = callClaude(prompt);
+    const match = result.match(/\[[\s\S]*\]/);
+    let judged = [];
+    try { judged = JSON.parse(match[0]); } catch { judged = []; }
 
-  const awaitingItems = indices
-    .filter(i => i >= 0 && i < awaiting.length)
-    .map(i => ({
-      threadId: awaiting[i].threadId,
-      subject: awaiting[i].subject,
-      to: awaiting[i].to,
-      date: awaiting[i].date,
-      snippet: awaiting[i].snippet,
-      type: "awaiting_reply",
-    }));
-
-  // AI要約
-  if (awaitingItems.length > 0) {
-    const summaryInput = awaitingItems.map((m, i) => {
-      const orig = awaiting.find(a => a.threadId === m.threadId);
-      return `${i}: [${m.subject}] to: ${m.to}\n${orig ? orig.snippet : ""}`;
-    }).join("\n---\n");
-
-    const summaryPrompt = `各メールで相手に何を求めているか1行（30文字以内）で要約して。JSON配列で返して。
-例: ["見積書の送付を依頼した", "契約書の確認を求めた"]
-
-${summaryInput}`;
-
-    const summaryResult = callHaiku(summaryPrompt);
-    const summaries = parseJsonArray(summaryResult);
-    for (let i = 0; i < awaitingItems.length; i++) {
-      awaitingItems[i].summary = summaries[i] || "";
+    for (const j of judged) {
+      if (j.index >= 0 && j.index < batch.length) {
+        awaitingItems.push({
+          threadId: batch[j.index].threadId,
+          subject: batch[j.index].subject,
+          to: batch[j.index].to,
+          date: batch[j.index].date,
+          snippet: batch[j.index].snippet,
+          summary: j.summary || "",
+          type: "awaiting_reply",
+        });
+      }
     }
   }
 
@@ -387,7 +514,7 @@ function cleanup() {
 // ============================================
 // Haiku API呼び出し
 // ============================================
-function callHaiku(prompt) {
+function callClaude(prompt) {
   const apiKey = PropertiesService.getScriptProperties().getProperty("ANTHROPIC_API_KEY");
   const response = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", {
     method: "post",
@@ -397,14 +524,18 @@ function callHaiku(prompt) {
       "anthropic-version": "2023-06-01",
     },
     payload: JSON.stringify({
-      model: HAIKU_MODEL,
-      max_tokens: 1024,
+      model: MODEL,
+      max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
     }),
     muteHttpExceptions: true,
   });
 
   const data = JSON.parse(response.getContentText());
+  if (data.error) {
+    console.log("Claude APIエラー: " + JSON.stringify(data.error));
+    throw new Error("Claude API: " + data.error.message);
+  }
   return data.content[0].text;
 }
 
@@ -449,6 +580,26 @@ function getStoredItems() {
 
 function saveItems(items) {
   PropertiesService.getScriptProperties().setProperty("email_items", JSON.stringify(items));
+}
+
+function getLearnedPatterns() {
+  const raw = PropertiesService.getScriptProperties().getProperty("learned_patterns");
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function saveLearnedPatterns(patterns) {
+  PropertiesService.getScriptProperties().setProperty("learned_patterns", JSON.stringify(patterns.slice(-500)));
+}
+
+function getDismissedIds(key) {
+  const raw = PropertiesService.getScriptProperties().getProperty(key);
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function saveDismissedIds(key, ids) {
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify(ids.slice(-500)));
 }
 
 function getAwaitingItems() {
@@ -509,9 +660,11 @@ function setupTriggers() {
     .everyHours(3)
     .create();
 
+  // 毎朝7時に返信待ちスキャン（scanEmailsの後）
   ScriptApp.newTrigger("scanAwaitingReplies")
     .timeBased()
-    .everyHours(3)
+    .everyDays(1)
+    .atHour(7)
     .create();
 
   // 毎週月曜に重複掃除
@@ -520,4 +673,12 @@ function setupTriggers() {
     .onWeekDay(ScriptApp.WeekDay.MONDAY)
     .atHour(6)
     .create();
+}
+
+// ============================================
+// リセット＆再スキャン
+// ============================================
+function resetAndScan() {
+  saveItems([]);
+  scanEmails();
 }

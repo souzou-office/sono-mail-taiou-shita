@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 
 const GAS_URL = import.meta.env.VITE_GAS_URL || "";
-const GAS_TOKEN = import.meta.env.VITE_GAS_TOKEN || "";
+const API_TOKEN = import.meta.env.VITE_API_TOKEN || "";
 const API_URL = import.meta.env.VITE_API_URL || "";
 
 function extractName(from) {
@@ -75,6 +75,9 @@ export default function App() {
   const [sortKey, setSortKey] = useState("priority");
   const [activeTab, setActiveTab] = useState("pending");
   const [awaitingItems, setAwaitingItems] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [watchEmails, setWatchEmails] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
 
   function loadItems() {
     if (!GAS_URL) {
@@ -93,12 +96,10 @@ export default function App() {
       return;
     }
     setRefreshing(true);
-    fetch(GAS_URL)
+    fetch(`${GAS_URL}?token=${API_TOKEN}`)
       .then((r) => r.json())
       .then((data) => {
-        const dismissedIds = loadDismissedIds();
-        const pending = (data.pending || data).filter((it) => !dismissedIds.includes(it.threadId));
-        setItems(pending);
+        setItems(data.pending || data);
         setAwaitingItems(data.awaiting || []);
         setError(null);
       })
@@ -107,32 +108,50 @@ export default function App() {
   }
 
   function loadLearningStats() {
-    if (!API_URL) {
-      setLearningStats({
-        learnedPatterns: { total: 3, confirmed: 1, items: [
-          { senderEmail: "noreply@github.com", result: "返信不要", hitCount: 5, confirmed: true },
-          { senderEmail: "tanaka@example.com", result: "返信必要", hitCount: 2, confirmed: false },
-          { senderEmail: "info@newsletter.jp", result: "返信不要", hitCount: 1, confirmed: false },
-        ]},
-        senderCategories: { total: 4, breakdown: { HUMAN: 2, NEWSLETTER: 1, NOTIFICATION: 1 } },
-        feedbackCount: 7,
-      });
-      return;
-    }
-    fetch(`${API_URL}/learning-stats?userId=demo`)
+    if (!GAS_URL) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=learningStats`)
       .then((r) => r.json())
       .then((data) => setLearningStats(data))
       .catch(() => {});
   }
 
-  useEffect(() => { loadItems(); }, []);
+  function learnSender(senderEmail) {
+    if (!GAS_URL || !senderEmail) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=learn&senderEmail=${encodeURIComponent(senderEmail)}`)
+      .catch(() => {});
+  }
+
+  function loadSettings() {
+    if (!GAS_URL) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=settings`)
+      .then((r) => r.json())
+      .then((data) => { setWatchEmails(data.watchEmails || ""); })
+      .catch(() => {});
+  }
+
+  function saveSettings() {
+    if (!GAS_URL) return;
+    setSavingSettings(true);
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=saveSettings&watchEmails=${encodeURIComponent(watchEmails)}`)
+      .then((r) => r.json())
+      .then(() => { setSavingSettings(false); alert("保存しました"); })
+      .catch(() => setSavingSettings(false));
+  }
+
+  useEffect(() => { loadItems(); loadSettings(); }, []);
+
+  function dismissToGAS(threadId, type) {
+    if (!GAS_URL) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=dismiss&threadId=${encodeURIComponent(threadId)}&type=${type}`)
+      .catch(() => {});
+  }
 
   function handleReplied(item) {
+    dismissToGAS(item.threadId, "pending");
     setItems((prev) => prev ? prev.filter((it) => it.threadId !== item.threadId) : prev);
   }
 
   function handleDismiss(item) {
-    // 前のundoタイマーがあれば確定させる
     if (undoTimer) {
       clearTimeout(undoTimer);
       confirmDismiss();
@@ -141,41 +160,24 @@ export default function App() {
     setDismissed((prev) => ({ ...prev, [item.threadId]: true }));
     setUndoItem(item);
 
-    // 5秒後に確定（API送信）
     const timer = setTimeout(() => {
       confirmDismiss(item);
     }, 5000);
     setUndoTimer(timer);
   }
 
-  function saveDismissedIds(ids) {
-    try { localStorage.setItem("dismissed_threads", JSON.stringify(ids)); } catch (e) {}
-  }
-
-  function loadDismissedIds() {
-    try { return JSON.parse(localStorage.getItem("dismissed_threads") || "[]"); } catch (e) { return []; }
+  function dismissAwaiting(e, threadId) {
+    e.stopPropagation();
+    dismissToGAS(threadId, "awaiting");
+    setAwaitingItems((prev) => prev.filter((it) => it.threadId !== threadId));
   }
 
   function confirmDismiss(item) {
     const target = item || undoItem;
     if (!target) return;
 
-    if (API_URL) {
-      fetch(`${API_URL}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: "demo",
-          messageId: target.messageId,
-          threadId: target.threadId,
-          senderEmail: extractEmail(target.from),
-          needsReply: false,
-        }),
-      }).catch(() => {});
-    }
-
-    const ids = loadDismissedIds();
-    if (!ids.includes(target.threadId)) { ids.push(target.threadId); saveDismissedIds(ids); }
+    learnSender(extractEmail(target.from));
+    dismissToGAS(target.threadId, "pending");
 
     setItems((prev) => prev ? prev.filter((it) => it.threadId !== target.threadId) : prev);
     setDismissed((prev) => { const next = { ...prev }; delete next[target.threadId]; return next; });
@@ -203,16 +205,20 @@ export default function App() {
     document.title = total > 0 ? `(${total}) そのメール対応した？` : "そのメール対応した？";
   }, [visibleItems.length, awaitingItems.length]);
 
-  // ソート（返信済みは常に下）
+  // ソート（返信済みは常に下、至急→要注意→未対応→低の順）
   const urgencyOrder = { urgent: 0, warning: 1, normal: 2, low: 3, replied: 4 };
   const sortedItems = [...visibleItems].sort((a, b) => {
-    if (a.replied !== b.replied) return a.replied ? 1 : -1;
     if (sortKey === "priority") {
-      const ua = urgencyOrder[urgencyLevel(a.date, a.priority)] ?? 2;
-      const ub = urgencyOrder[urgencyLevel(b.date, b.priority)] ?? 2;
+      // まずステータス順（至急→要注意→未対応→低→返信済み）
+      const levelA = a.replied ? "replied" : urgencyLevel(a.date, a.priority);
+      const levelB = b.replied ? "replied" : urgencyLevel(b.date, b.priority);
+      const ua = urgencyOrder[levelA] ?? 2;
+      const ub = urgencyOrder[levelB] ?? 2;
       if (ua !== ub) return ua - ub;
-      return (b.priority || 3) - (a.priority || 3);
+      // 同じステータスなら古い順（放置が長い方が上）
+      return new Date(a.date) - new Date(b.date);
     }
+    if (a.replied !== b.replied) return a.replied ? 1 : -1;
     if (sortKey === "date") return new Date(b.date) - new Date(a.date);
     if (sortKey === "sender") return extractName(a.from).localeCompare(extractName(b.from));
     return 0;
@@ -263,7 +269,7 @@ export default function App() {
         zIndex: 10,
       }}>
         <div className="header-inner" style={{
-          maxWidth: 1000,
+          maxWidth: 1200,
           margin: "0 auto",
           padding: "4px 24px",
           display: "flex",
@@ -300,6 +306,15 @@ export default function App() {
               学習状況
             </button>
             <button
+              onClick={() => { setShowSettings(!showSettings); if (!showSettings) loadSettings(); }}
+              style={{
+                fontSize: 11, color: "#666", background: showSettings ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
+                borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+              }}
+            >
+              設定
+            </button>
+            <button
               onClick={loadItems}
               disabled={refreshing}
               className="refresh-btn"
@@ -316,7 +331,7 @@ export default function App() {
       </header>
 
       {/* ===== メインコンテンツ ===== */}
-      <div style={{ padding: "24px 24px 80px", maxWidth: 1000, margin: "0 auto" }}>
+      <div style={{ padding: "24px 24px 80px", maxWidth: 1200, margin: "0 auto" }}>
         <div className="sort-bar" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <button
@@ -378,44 +393,59 @@ export default function App() {
                 <span style={{ color: "#999" }}>フィードバック数: </span>
                 <span style={{ fontWeight: 600 }}>{learningStats.feedbackCount}回</span>
               </div>
-              <div>
-                <span style={{ color: "#999" }}>送信者分類: </span>
-                <span style={{ fontWeight: 600 }}>{learningStats.senderCategories.total}件</span>
-              </div>
             </div>
 
             {learningStats.learnedPatterns.items.length > 0 && (
               <div style={{ fontSize: 12, color: "#555" }}>
-                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>学習済み送信者</div>
+                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>学習済み送信者（3回以上で自動除外）</div>
                 {learningStats.learnedPatterns.items.map((p, i) => (
                   <div key={i} style={{ display: "flex", gap: 12, padding: "3px 0", alignItems: "center" }}>
                     <span style={{ minWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.senderEmail}</span>
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 3,
-                      background: p.result === "返信必要" ? "#e8f4f8" : "#f5f5f4",
-                      color: p.result === "返信必要" ? "#2b6cb0" : "#888",
-                    }}>
-                      {p.result}
-                    </span>
                     <span style={{ color: "#bbb" }}>{p.hitCount}回</span>
-                    {p.confirmed && <span style={{ color: "#16a34a", fontSize: 10, fontWeight: 600 }}>確定</span>}
+                    {p.hitCount >= 3 && <span style={{ color: "#16a34a", fontSize: 10, fontWeight: 600 }}>自動除外中</span>}
                   </div>
                 ))}
               </div>
             )}
+          </div>
+        )}
 
-            {Object.keys(learningStats.senderCategories.breakdown).length > 0 && (
-              <div style={{ fontSize: 12, color: "#555", marginTop: 12 }}>
-                <div style={{ fontWeight: 600, marginBottom: 6, color: "#888" }}>送信者カテゴリ内訳</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {Object.entries(learningStats.senderCategories.breakdown).map(([cat, count]) => (
-                    <span key={cat} style={{ background: "#f5f5f4", padding: "2px 8px", borderRadius: 4, fontSize: 11 }}>
-                      {cat}: {count}
-                    </span>
-                  ))}
-                </div>
+        {/* ===== 設定パネル ===== */}
+        {showSettings && (
+          <div style={{
+            background: "#fff", borderRadius: 8, border: "1px solid #e5e5e3",
+            padding: 16, marginBottom: 16, animation: "fadeIn 0.2s ease",
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: "#333" }}>スキャン設定</div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "#666", display: "block", marginBottom: 4 }}>
+                監視メールアドレス（カンマ区切り）
+              </label>
+              <input
+                type="text"
+                value={watchEmails}
+                onChange={(e) => setWatchEmails(e.target.value)}
+                placeholder="例: ikeda@souzou-office.jp,info@souzou-office.jp"
+                style={{
+                  width: "100%", padding: "8px 12px", fontSize: 13,
+                  border: "1px solid #e5e5e3", borderRadius: 6, outline: "none",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+                空欄にすると全アドレス宛のメールをスキャンします
               </div>
-            )}
+            </div>
+            <button
+              onClick={saveSettings}
+              disabled={savingSettings}
+              style={{
+                fontSize: 12, fontWeight: 600, color: "#fff", background: "#7c5cfc",
+                border: "none", borderRadius: 6, padding: "8px 20px", cursor: "pointer",
+                opacity: savingSettings ? 0.5 : 1,
+              }}
+            >
+              {savingSettings ? "保存中..." : "保存"}
+            </button>
           </div>
         )}
 
@@ -429,7 +459,7 @@ export default function App() {
           {/* ヘッダー */}
           <div className="table-header" style={{
             display: "grid",
-            gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
+            gridTemplateColumns: "minmax(200px, 2fr) 160px 200px minmax(100px, 1fr) 80px 60px 60px",
             borderBottom: "1px solid #e5e5e3",
             background: "#fafaf9",
             fontSize: 11,
@@ -484,7 +514,7 @@ export default function App() {
               >
               <div className="grid-row" style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(200px, 2fr) 100px 160px minmax(100px, 1fr) 80px 60px 60px",
+                  gridTemplateColumns: "minmax(200px, 2fr) 160px 200px minmax(100px, 1fr) 80px 60px 60px",
               }}>
                 {/* 件名 + AI要約 */}
                 <div className="col-subject" style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
@@ -519,16 +549,6 @@ export default function App() {
                   }}>
                     {status.label}
                   </span>
-                  {item.priority && PRIORITY_LABELS[item.priority] && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 600, padding: "1px 5px", borderRadius: 3,
-                      background: PRIORITY_LABELS[item.priority].bg,
-                      color: PRIORITY_LABELS[item.priority].color,
-                      whiteSpace: "nowrap",
-                    }}>
-                      P{item.priority}
-                    </span>
-                  )}
                   {item.mood && MOOD_CONFIG[item.mood] && item.mood !== "calm" && (
                     <span style={{
                       fontSize: 10, fontWeight: 500, padding: "1px 5px", borderRadius: 3,
@@ -655,7 +675,7 @@ export default function App() {
           {/* ヘッダー */}
           <div className="table-header" style={{
             display: "grid",
-            gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
+            gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px 60px 60px",
             borderBottom: "1px solid #e5e5e3",
             background: "#fafaf9",
             fontSize: 11,
@@ -668,6 +688,8 @@ export default function App() {
             <div style={{ padding: "8px 12px" }}>送信先</div>
             <div style={{ padding: "8px 12px" }}>送信日時</div>
             <div style={{ padding: "8px 12px" }}>経過</div>
+            <div style={{ padding: "8px 12px" }}></div>
+            <div style={{ padding: "8px 12px" }}></div>
           </div>
 
           {awaitingItems.length === 0 && (
@@ -694,7 +716,7 @@ export default function App() {
               >
                 <div className="grid-row" style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px",
+                  gridTemplateColumns: "minmax(200px, 2fr) 160px minmax(100px, 1fr) 80px 60px 60px",
                 }}>
                   {/* 件名 + AI要約 */}
                   <div className="col-subject" style={{ padding: "10px 16px", display: "flex", alignItems: "flex-start", gap: 8, minWidth: 0 }}>
@@ -736,6 +758,36 @@ export default function App() {
                   {/* 経過 */}
                   <div className="col-elapsed" style={{ padding: "10px 12px", fontSize: 12, color: status.color, fontWeight: 600, display: "flex", alignItems: "center", fontVariantNumeric: "tabular-nums" }}>
                     {timeAgo(item.date)}
+                  </div>
+
+                  {/* 済みボタン */}
+                  <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
+                    <button
+                      className="dismiss-btn replied-btn"
+                      onClick={(e) => dismissAwaiting(e, item.threadId)}
+                      title="返信が来た"
+                      style={{
+                        fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
+                        borderRadius: 4, padding: "2px 6px", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      済み
+                    </button>
+                  </div>
+
+                  {/* 不要ボタン */}
+                  <div className="col-btn" style={{ padding: "10px 8px", display: "flex", alignItems: "center" }}>
+                    <button
+                      className="dismiss-btn"
+                      onClick={(e) => dismissAwaiting(e, item.threadId)}
+                      title="返信待ち不要"
+                      style={{
+                        fontSize: 11, color: "#999", background: "#f5f5f4", border: "1px solid #e5e5e3",
+                        borderRadius: 4, padding: "2px 6px", cursor: "pointer", whiteSpace: "nowrap",
+                      }}
+                    >
+                      不要
+                    </button>
                   </div>
                 </div>
 
