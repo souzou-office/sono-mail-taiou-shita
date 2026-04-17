@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
-  base: "/",
+  base: "/sono-mail-taiou-shita/",
   plugins: [
     react(),
     VitePWA({
@@ -15,7 +15,7 @@ export default defineConfig({
         theme_color: "#f8f8f7",
         background_color: "#f8f8f7",
         display: "standalone",
-        start_url: "/",
+        start_url: "/sono-mail-taiou-shita/",
         icons: [
           {
             src: "icon-192.png",
