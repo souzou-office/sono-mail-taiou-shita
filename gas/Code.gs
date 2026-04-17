@@ -222,8 +222,7 @@ function scanEmails() {
 
   console.log("未返信: " + unreplied.length + "件");
   if (unreplied.length === 0) {
-    console.log("未返信0件のため終了");
-    saveItems([]);
+    console.log("未返信0件のため終了（既存データは保持）");
     return;
   }
 
@@ -233,7 +232,6 @@ function scanEmails() {
   const afterSkip = unreplied.filter(m => !skipSet.has(extractEmailAddress(m.from).toLowerCase()));
 
   if (afterSkip.length === 0) {
-    saveItems([]);
     return;
   }
 
@@ -243,7 +241,6 @@ function scanEmails() {
   const afterLearned = afterSkip.filter(m => !learnedSkip.has(extractEmailAddress(m.from).toLowerCase()));
 
   if (afterLearned.length === 0) {
-    saveItems([]);
     return;
   }
 
@@ -267,7 +264,6 @@ function scanEmails() {
   console.log(`スキャン結果: Gmail ${threads.length}件 → 未返信 ${unreplied.length}件 → スキップリスト後 ${afterSkip.length}件 → 学習除外後 ${afterLearned.length}件 → ルールフィルタ後 ${filtered.length}件 → AIに送信`);
 
   if (filtered.length === 0) {
-    saveItems([]);
     return;
   }
 
