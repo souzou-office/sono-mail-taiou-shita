@@ -153,8 +153,12 @@ function quickAwaitingCheck() {
       const thread = GmailApp.getThreadById(item.threadId);
       if (!thread) return false;
       const messages = thread.getMessages();
-      const latest = messages[messages.length - 1];
-      return latest.getFrom().includes(MY_EMAIL); // まだ自分が最後 → 残す
+      const savedDate = new Date(item.date);
+      // 保存日以降に相手から返信があれば待ち解除
+      const hasReplyFromOther = messages.some(m =>
+        m.getDate() > savedDate && !m.getFrom().includes(MY_EMAIL)
+      );
+      return !hasReplyFromOther;
     } catch (_) { return false; }
   });
 
@@ -500,12 +504,16 @@ ${details}`;
   const merged = [
     ...existing.filter(e => {
       // 返信が来たものは消す
+      if (!MY_EMAIL) return false;
       try {
         const thread = GmailApp.getThreadById(e.threadId);
         if (!thread) return false;
         const messages = thread.getMessages();
-        const latest = messages[messages.length - 1];
-        return MY_EMAIL ? latest.getFrom().includes(MY_EMAIL) : false; // まだ自分が最後 → 残す
+        const savedDate = new Date(e.date);
+        const hasReplyFromOther = messages.some(m =>
+          m.getDate() > savedDate && !m.getFrom().includes(MY_EMAIL)
+        );
+        return !hasReplyFromOther;
       } catch (_) { return false; }
     }),
     ...awaitingItems.filter(a => !existingIds.has(a.threadId)),
