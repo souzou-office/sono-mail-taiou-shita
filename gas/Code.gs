@@ -101,6 +101,7 @@ function doGet(e) {
 
   // アクセス時に返信済みチェック（リアルタイム性向上）
   quickReplyCheck();
+  quickAwaitingCheck();
   const pending = getStoredItems();
   const awaiting = getAwaitingItems();
   const dismissedPending = getDismissedIds("dismissed_threads");
@@ -138,6 +139,27 @@ function quickReplyCheck() {
 
   if (changed) {
     saveItems(items);
+  }
+}
+
+// 返信待ちの返信チェック（相手から返信来たら消す）
+function quickAwaitingCheck() {
+  const items = getAwaitingItems();
+  if (items.length === 0) return;
+  if (!MY_EMAIL) return;
+
+  const kept = items.filter(item => {
+    try {
+      const thread = GmailApp.getThreadById(item.threadId);
+      if (!thread) return false;
+      const messages = thread.getMessages();
+      const latest = messages[messages.length - 1];
+      return latest.getFrom().includes(MY_EMAIL); // まだ自分が最後 → 残す
+    } catch (_) { return false; }
+  });
+
+  if (kept.length !== items.length) {
+    saveAwaitingItems(kept);
   }
 }
 
@@ -483,7 +505,7 @@ ${details}`;
         if (!thread) return false;
         const messages = thread.getMessages();
         const latest = messages[messages.length - 1];
-        return latest.getFrom().includes(MY_EMAIL); // まだ自分が最後 → 残す
+        return MY_EMAIL ? latest.getFrom().includes(MY_EMAIL) : false; // まだ自分が最後 → 残す
       } catch (_) { return false; }
     }),
     ...awaitingItems.filter(a => !existingIds.has(a.threadId)),
