@@ -13,6 +13,21 @@ const MAX_BODY_CHARS = 10000;
 const BATCH_SIZE = 10;
 const MY_EMAIL = PropertiesService.getScriptProperties().getProperty("MY_EMAIL") || Session.getActiveUser().getEmail();
 
+// 「自分から」判定に使うメールアドレスのリスト
+// WATCH_EMAILS（監視アドレスのカンマ区切り）があればそれを優先、なければ MY_EMAIL を使う
+function getMyEmails() {
+  const watch = (PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "")
+    .split(",").map(e => e.trim()).filter(Boolean);
+  if (watch.length > 0) return watch;
+  return MY_EMAIL ? [MY_EMAIL] : [];
+}
+
+function isFromMe(fromField) {
+  if (!fromField) return false;
+  const lower = fromField.toLowerCase();
+  return getMyEmails().some(e => lower.includes(e.toLowerCase()));
+}
+
 // ============================================
 // Web API（フロント用）
 // ============================================
@@ -127,7 +142,7 @@ function quickReplyCheck() {
       const messages = thread.getMessages();
       const latest = messages[messages.length - 1];
       const wasReplied = item.replied || false;
-      const isReplied = MY_EMAIL ? latest.getFrom().includes(MY_EMAIL) : false;
+      const isReplied = isFromMe(latest.getFrom());
       if (isReplied !== wasReplied) {
         item.replied = isReplied;
         changed = true;
@@ -146,7 +161,7 @@ function quickReplyCheck() {
 function quickAwaitingCheck() {
   const items = getAwaitingItems();
   if (items.length === 0) return;
-  if (!MY_EMAIL) return;
+  if (getMyEmails().length === 0) return;
 
   const kept = items.filter(item => {
     try {
@@ -156,7 +171,7 @@ function quickAwaitingCheck() {
       const savedDate = new Date(item.date);
       // 保存日以降に相手から返信があれば待ち解除
       const hasReplyFromOther = messages.some(m =>
-        m.getDate() > savedDate && !m.getFrom().includes(MY_EMAIL)
+        m.getDate() > savedDate && !isFromMe(m.getFrom())
       );
       return !hasReplyFromOther;
     } catch (_) { return false; }
@@ -209,7 +224,7 @@ function scanEmails() {
   for (const thread of threads) {
     const messages = thread.getMessages();
     const latest = messages[messages.length - 1];
-    const latestIsFromMe = latest.getFrom().includes(MY_EMAIL);
+    const latestIsFromMe = isFromMe(latest.getFrom());
 
     // 最新メッセージが自分 → 対応済み、スキップ
     if (latestIsFromMe) continue;
@@ -373,7 +388,7 @@ function checkReplies() {
 
       const messages = thread.getMessages();
       const latest = messages[messages.length - 1];
-      const latestIsFromMe = latest.getFrom().includes(MY_EMAIL);
+      const latestIsFromMe = isFromMe(latest.getFrom());
 
       if (latestIsFromMe) {
         // 自分が最後に返信 → 対応済み、消す
@@ -433,7 +448,7 @@ function scanAwaitingReplies() {
   for (const thread of threads) {
     const messages = thread.getMessages();
     const latest = messages[messages.length - 1];
-    const latestIsFromMe = latest.getFrom().includes(MY_EMAIL);
+    const latestIsFromMe = isFromMe(latest.getFrom());
 
     // 最新が自分 → 相手からまだ返信なし
     if (!latestIsFromMe) continue;
@@ -504,14 +519,14 @@ ${details}`;
   const merged = [
     ...existing.filter(e => {
       // 返信が来たものは消す
-      if (!MY_EMAIL) return false;
+      if (getMyEmails().length === 0) return false;
       try {
         const thread = GmailApp.getThreadById(e.threadId);
         if (!thread) return false;
         const messages = thread.getMessages();
         const savedDate = new Date(e.date);
         const hasReplyFromOther = messages.some(m =>
-          m.getDate() > savedDate && !m.getFrom().includes(MY_EMAIL)
+          m.getDate() > savedDate && !isFromMe(m.getFrom())
         );
         return !hasReplyFromOther;
       } catch (_) { return false; }
