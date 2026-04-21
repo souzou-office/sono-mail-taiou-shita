@@ -161,23 +161,37 @@ function quickReplyCheck() {
 function quickAwaitingCheck() {
   const items = getAwaitingItems();
   if (items.length === 0) return;
-  if (getMyEmails().length === 0) return;
+  if (getMyEmails().length === 0) {
+    console.log("[quickAwaitingCheck] getMyEmails()が空のためスキップ");
+    return;
+  }
 
   const kept = items.filter(item => {
     try {
       const thread = GmailApp.getThreadById(item.threadId);
-      if (!thread) return false;
+      if (!thread) {
+        console.log(`[quickAwaitingCheck] 削除: スレッド消失 subject="${item.subject}" threadId=${item.threadId}`);
+        return false;
+      }
       const messages = thread.getMessages();
       const savedDate = new Date(item.date);
-      // 保存日以降に相手から返信があれば待ち解除
-      const hasReplyFromOther = messages.some(m =>
+      // 保存日以降の相手からのメッセージを探す
+      const replyMessage = messages.find(m =>
         m.getDate() > savedDate && !isFromMe(m.getFrom())
       );
-      return !hasReplyFromOther;
-    } catch (_) { return false; }
+      if (replyMessage) {
+        console.log(`[quickAwaitingCheck] 削除: subject="${item.subject}" savedDate=${item.date} 発火メッセージ from="${replyMessage.getFrom()}" date=${replyMessage.getDate().toISOString()}`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.log(`[quickAwaitingCheck] 削除: 例外 subject="${item.subject}" error=${e.message}`);
+      return false;
+    }
   });
 
   if (kept.length !== items.length) {
+    console.log(`[quickAwaitingCheck] ${items.length}件 → ${kept.length}件 (${items.length - kept.length}件削除)`);
     saveAwaitingItems(kept);
   }
 }
