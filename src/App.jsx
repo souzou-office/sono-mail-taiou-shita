@@ -61,6 +61,18 @@ const PRIORITY_LABELS = {
   1: { label: "低", bg: "#f5f5f4", color: "#888" },
 };
 
+const DISMISS_KEY = "sono-mail-dismissed";
+
+function loadDismissedIds() {
+  try {
+    return JSON.parse(localStorage.getItem(DISMISS_KEY) || "[]");
+  } catch { return []; }
+}
+
+function saveDismissedIds(ids) {
+  localStorage.setItem(DISMISS_KEY, JSON.stringify(ids));
+}
+
 export default function App() {
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
@@ -99,7 +111,9 @@ export default function App() {
     fetch(`${GAS_URL}?token=${API_TOKEN}`)
       .then((r) => r.json())
       .then((data) => {
-        setItems(data.pending || data);
+        const dismissedIds = loadDismissedIds();
+        const all = data.pending || data;
+        setItems(Array.isArray(all) ? all.filter((it) => !dismissedIds.includes(it.threadId)) : all);
         setAwaitingItems(data.awaiting || []);
         setError(null);
       })
@@ -158,6 +172,8 @@ export default function App() {
     }
 
     setDismissed((prev) => ({ ...prev, [item.threadId]: true }));
+    const ids = loadDismissedIds();
+    if (!ids.includes(item.threadId)) saveDismissedIds([...ids, item.threadId]);
     setUndoItem(item);
 
     const timer = setTimeout(() => {
