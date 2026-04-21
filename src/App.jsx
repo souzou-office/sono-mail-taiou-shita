@@ -188,8 +188,6 @@ export default function App() {
   function handleUndo() {
     if (!undoItem) return;
     if (undoTimer) clearTimeout(undoTimer);
-    const ids = loadDismissedIds().filter((id) => id !== undoItem.threadId);
-    saveDismissedIds(ids);
     setDismissed((prev) => { const next = { ...prev }; delete next[undoItem.threadId]; return next; });
     setUndoItem(null);
     setUndoTimer(null);
