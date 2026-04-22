@@ -78,6 +78,26 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [watchEmails, setWatchEmails] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugLogs, setDebugLogs] = useState([]);
+  const [loadingDebug, setLoadingDebug] = useState(false);
+
+  function loadDebugLogs() {
+    if (!GAS_URL) return;
+    setLoadingDebug(true);
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=debugLogs`)
+      .then((r) => r.json())
+      .then((data) => setDebugLogs(data.logs || []))
+      .catch(() => {})
+      .finally(() => setLoadingDebug(false));
+  }
+
+  function clearDebugLogs() {
+    if (!GAS_URL) return;
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=clearDebugLogs`)
+      .then(() => setDebugLogs([]))
+      .catch(() => {});
+  }
 
   function loadItems() {
     if (!GAS_URL) {
@@ -313,6 +333,15 @@ export default function App() {
               設定
             </button>
             <button
+              onClick={() => { setShowDebug(!showDebug); if (!showDebug) loadDebugLogs(); }}
+              style={{
+                fontSize: 11, color: "#666", background: showDebug ? "#f0f0ee" : "#fff", border: "1px solid #e5e5e3",
+                borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontWeight: 500,
+              }}
+            >
+              デバッグ
+            </button>
+            <button
               onClick={loadItems}
               disabled={refreshing}
               className="refresh-btn"
@@ -444,6 +473,68 @@ export default function App() {
             >
               {savingSettings ? "保存中..." : "保存"}
             </button>
+          </div>
+        )}
+
+        {/* ===== デバッグパネル ===== */}
+        {showDebug && (
+          <div style={{
+            background: "#fff", borderRadius: 8, border: "1px solid #e5e5e3",
+            padding: 16, marginBottom: 16, animation: "fadeIn 0.2s ease",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#333" }}>
+                デバッグログ（最新200件・新しい順）
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={loadDebugLogs}
+                  disabled={loadingDebug}
+                  style={{
+                    fontSize: 11, color: "#666", background: "#fff", border: "1px solid #e5e5e3",
+                    borderRadius: 4, padding: "4px 10px", cursor: "pointer", opacity: loadingDebug ? 0.5 : 1,
+                  }}
+                >
+                  {loadingDebug ? "読込中..." : "再読込"}
+                </button>
+                <button
+                  onClick={() => { if (confirm("デバッグログを全削除しますか？")) clearDebugLogs(); }}
+                  style={{
+                    fontSize: 11, color: "#c53030", background: "#fff", border: "1px solid #feb2b2",
+                    borderRadius: 4, padding: "4px 10px", cursor: "pointer",
+                  }}
+                >
+                  クリア
+                </button>
+              </div>
+            </div>
+            {debugLogs.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#999", padding: "12px 0" }}>
+                ログはまだありません。
+              </div>
+            ) : (
+              <div style={{ maxHeight: 400, overflowY: "auto", fontSize: 11, fontFamily: "monospace" }}>
+                {[...debugLogs].reverse().map((log, i) => (
+                  <div key={i} style={{
+                    padding: "6px 8px", borderBottom: "1px solid #f0f0ee",
+                    background: log.action === "removed" ? "#fef6f6" : log.action === "repliedFlag" ? "#f0f8ff" : "#fff",
+                  }}>
+                    <div style={{ color: "#666", fontSize: 10 }}>
+                      {new Date(log.ts).toLocaleString("ja-JP")} / {log.func} / <strong style={{ color: log.action === "removed" ? "#c53030" : "#2b6cb0" }}>{log.action}</strong>
+                    </div>
+                    {log.subject && <div style={{ color: "#333", marginTop: 2 }}>件名: {log.subject}</div>}
+                    {log.reason && <div style={{ color: "#888", marginTop: 2 }}>理由: {log.reason}</div>}
+                    {log.triggerFrom && <div style={{ color: "#888", marginTop: 2 }}>きっかけFrom: {log.triggerFrom}</div>}
+                    {log.triggerDate && <div style={{ color: "#888" }}>きっかけ日時: {new Date(log.triggerDate).toLocaleString("ja-JP")}</div>}
+                    {log.savedDate && <div style={{ color: "#888" }}>保存日時: {new Date(log.savedDate).toLocaleString("ja-JP")}</div>}
+                    {log.latestFrom && <div style={{ color: "#888", marginTop: 2 }}>最新From: {log.latestFrom}</div>}
+                    {log.wasReplied !== undefined && <div style={{ color: "#888" }}>返信済: {String(log.wasReplied)} → {String(log.isReplied)}</div>}
+                    {log.myEmails && <div style={{ color: "#aaa" }}>自分判定: [{log.myEmails.join(", ")}]</div>}
+                    {log.error && <div style={{ color: "#c53030" }}>エラー: {log.error}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

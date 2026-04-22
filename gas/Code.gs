@@ -28,6 +28,24 @@ function isFromMe(fromField) {
   return getMyEmails().some(e => lower.includes(e.toLowerCase()));
 }
 
+// デバッグログの保存・取得（直近200件）
+function appendDebugLogs(entries) {
+  if (!entries || entries.length === 0) return;
+  const existing = getDebugLogs();
+  const merged = [...existing, ...entries].slice(-200);
+  PropertiesService.getScriptProperties().setProperty("debug_logs", JSON.stringify(merged));
+}
+
+function getDebugLogs() {
+  const raw = PropertiesService.getScriptProperties().getProperty("debug_logs");
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+function clearDebugLogs() {
+  PropertiesService.getScriptProperties().deleteProperty("debug_logs");
+}
+
 // ============================================
 // Web API（フロント用）
 // ============================================
@@ -98,6 +116,19 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  // デバッグログ取得
+  if (e && e.parameter && e.parameter.action === "debugLogs") {
+    return ContentService.createTextOutput(JSON.stringify({ logs: getDebugLogs() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // デバッグログクリア
+  if (e && e.parameter && e.parameter.action === "clearDebugLogs") {
+    clearDebugLogs();
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   // スレッド除外（済み・不要）
   if (e && e.parameter && e.parameter.action === "dismiss") {
     const threadId = e.parameter.threadId || "";
@@ -134,6 +165,7 @@ function quickReplyCheck() {
   const items = getStoredItems();
   if (items.length === 0) return;
 
+  const logs = [];
   let changed = false;
   for (const item of items) {
     try {
@@ -146,40 +178,104 @@ function quickReplyCheck() {
       if (isReplied !== wasReplied) {
         item.replied = isReplied;
         changed = true;
+        logs.push({
+          ts: new Date().toISOString(),
+          func: "quickReplyCheck",
+          threadId: item.threadId,
+          subject: item.subject,
+          action: "repliedFlag",
+          wasReplied,
+          isReplied,
+          latestFrom: latest.getFrom(),
+        });
       }
     } catch (e) {
-      // エラー時はそのまま
+      logs.push({
+        ts: new Date().toISOString(),
+        func: "quickReplyCheck",
+        threadId: item.threadId,
+        subject: item.subject,
+        action: "error",
+        error: String(e),
+      });
     }
   }
 
   if (changed) {
     saveItems(items);
   }
+  appendDebugLogs(logs);
 }
 
 // 返信待ちの返信チェック（相手から返信来たら消す）
 function quickAwaitingCheck() {
   const items = getAwaitingItems();
   if (items.length === 0) return;
-  if (getMyEmails().length === 0) return;
+  if (getMyEmails().length === 0) {
+    appendDebugLogs([{
+      ts: new Date().toISOString(),
+      func: "quickAwaitingCheck",
+      action: "skip",
+      reason: "getMyEmails() is empty",
+    }]);
+    return;
+  }
 
+  const logs = [];
   const kept = items.filter(item => {
     try {
       const thread = GmailApp.getThreadById(item.threadId);
-      if (!thread) return false;
+      if (!thread) {
+        logs.push({
+          ts: new Date().toISOString(),
+          func: "quickAwaitingCheck",
+          threadId: item.threadId,
+          subject: item.subject,
+          action: "removed",
+          reason: "thread not found",
+        });
+        return false;
+      }
       const messages = thread.getMessages();
       const savedDate = new Date(item.date);
       // 保存日以降に相手から返信があれば待ち解除
-      const hasReplyFromOther = messages.some(m =>
+      const triggerMsg = messages.find(m =>
         m.getDate() > savedDate && !isFromMe(m.getFrom())
       );
-      return !hasReplyFromOther;
-    } catch (_) { return false; }
+      if (triggerMsg) {
+        logs.push({
+          ts: new Date().toISOString(),
+          func: "quickAwaitingCheck",
+          threadId: item.threadId,
+          subject: item.subject,
+          action: "removed",
+          reason: "reply from other",
+          savedDate: item.date,
+          triggerFrom: triggerMsg.getFrom(),
+          triggerDate: triggerMsg.getDate().toISOString(),
+          myEmails: getMyEmails(),
+        });
+        return false;
+      }
+      return true;
+    } catch (e) {
+      logs.push({
+        ts: new Date().toISOString(),
+        func: "quickAwaitingCheck",
+        threadId: item.threadId,
+        subject: item.subject,
+        action: "removed",
+        reason: "error",
+        error: String(e),
+      });
+      return false;
+    }
   });
 
   if (kept.length !== items.length) {
     saveAwaitingItems(kept);
   }
+  appendDebugLogs(logs);
 }
 
 function doPost(e) {
