@@ -77,7 +77,10 @@ export default function App() {
   const [awaitingItems, setAwaitingItems] = useState([]);
   const [showSettings, setShowSettings] = useState(false);
   const [watchEmails, setWatchEmails] = useState("");
+  const [myAliases, setMyAliases] = useState("");
+  const [myEmailFallback, setMyEmailFallback] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [debugLogs, setDebugLogs] = useState([]);
   const [loadingDebug, setLoadingDebug] = useState(false);
@@ -145,17 +148,41 @@ export default function App() {
     if (!GAS_URL) return;
     fetch(`${GAS_URL}?token=${API_TOKEN}&action=settings`)
       .then((r) => r.json())
-      .then((data) => { setWatchEmails(data.watchEmails || ""); })
+      .then((data) => {
+        setWatchEmails(data.watchEmails || "");
+        setMyAliases(data.myAliases || "");
+        setMyEmailFallback(data.myEmailFallback || "");
+      })
       .catch(() => {});
   }
 
   function saveSettings() {
     if (!GAS_URL) return;
     setSavingSettings(true);
-    fetch(`${GAS_URL}?token=${API_TOKEN}&action=saveSettings&watchEmails=${encodeURIComponent(watchEmails)}`)
+    const params = new URLSearchParams({
+      token: API_TOKEN,
+      action: "saveSettings",
+      watchEmails,
+      myAliases,
+    });
+    fetch(`${GAS_URL}?${params.toString()}`)
       .then((r) => r.json())
       .then(() => { setSavingSettings(false); alert("保存しました"); })
       .catch(() => setSavingSettings(false));
+  }
+
+  function rescanAwaiting() {
+    if (!GAS_URL) return;
+    if (!confirm("返信待ち一覧をリセットして再スキャンします。よろしいですか？（数秒〜数十秒かかります）")) return;
+    setRescanning(true);
+    fetch(`${GAS_URL}?token=${API_TOKEN}&action=rescanAwaiting`)
+      .then((r) => r.json())
+      .then((data) => {
+        alert(`再スキャン完了: ${data.count ?? 0}件`);
+        loadItems();
+      })
+      .catch(() => alert("再スキャンに失敗しました"))
+      .finally(() => setRescanning(false));
   }
 
   useEffect(() => { loadItems(); loadSettings(); }, []);
@@ -459,20 +486,52 @@ export default function App() {
                 }}
               />
               <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
-                空欄にすると全アドレス宛のメールをスキャンします
+                これらのアドレス宛の受信メールをスキャンします（空欄なら全アドレス）
               </div>
             </div>
-            <button
-              onClick={saveSettings}
-              disabled={savingSettings}
-              style={{
-                fontSize: 12, fontWeight: 600, color: "#fff", background: "#7c5cfc",
-                border: "none", borderRadius: 6, padding: "8px 20px", cursor: "pointer",
-                opacity: savingSettings ? 0.5 : 1,
-              }}
-            >
-              {savingSettings ? "保存中..." : "保存"}
-            </button>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: "#666", display: "block", marginBottom: 4 }}>
+                自分の送信アドレス（カンマ区切り）
+              </label>
+              <input
+                type="text"
+                value={myAliases}
+                onChange={(e) => setMyAliases(e.target.value)}
+                placeholder={myEmailFallback ? `例: ${myEmailFallback}` : "例: ikeda@souzou-office.jp"}
+                style={{
+                  width: "100%", padding: "8px 12px", fontSize: 13,
+                  border: "1px solid #e5e5e3", borderRadius: 6, outline: "none",
+                }}
+              />
+              <div style={{ fontSize: 11, color: "#999", marginTop: 4 }}>
+                「返信待ち」判定で使う自分のアドレス。共有inbox（info@等）は入れない。
+                空欄なら {myEmailFallback || "ログインユーザー"} を使います。
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                onClick={saveSettings}
+                disabled={savingSettings}
+                style={{
+                  fontSize: 12, fontWeight: 600, color: "#fff", background: "#7c5cfc",
+                  border: "none", borderRadius: 6, padding: "8px 20px", cursor: "pointer",
+                  opacity: savingSettings ? 0.5 : 1,
+                }}
+              >
+                {savingSettings ? "保存中..." : "保存"}
+              </button>
+              <button
+                onClick={rescanAwaiting}
+                disabled={rescanning}
+                style={{
+                  fontSize: 12, fontWeight: 600, color: "#c05621", background: "#fff",
+                  border: "1px solid #fbd38d", borderRadius: 6, padding: "8px 16px", cursor: "pointer",
+                  opacity: rescanning ? 0.5 : 1,
+                }}
+              >
+                {rescanning ? "再スキャン中..." : "返信待ちを再スキャン"}
+              </button>
+            </div>
           </div>
         )}
 

@@ -13,12 +13,15 @@ const MAX_BODY_CHARS = 10000;
 const BATCH_SIZE = 10;
 const MY_EMAIL = PropertiesService.getScriptProperties().getProperty("MY_EMAIL") || Session.getActiveUser().getEmail();
 
-// 「自分から」判定に使うメールアドレスのリスト
-// WATCH_EMAILS（監視アドレスのカンマ区切り）があればそれを優先、なければ MY_EMAIL を使う
+// 「自分から」判定に使うメールアドレスのリスト（＝自分の送信アドレス）
+// MY_ALIASES（カンマ区切り）があればそれを使い、なければ MY_EMAIL にフォールバック。
+// 注意: WATCH_EMAILS（受信監視用の複数アドレス）とは別物。
+// 共有メールボックス（info@ など）は WATCH_EMAILS には入れるが、MY_ALIASES には
+// 自分が実際に送信に使うアドレスだけを入れるのが正しい。
 function getMyEmails() {
-  const watch = (PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "")
+  const aliases = (PropertiesService.getScriptProperties().getProperty("MY_ALIASES") || "")
     .split(",").map(e => e.trim()).filter(Boolean);
-  if (watch.length > 0) return watch;
+  if (aliases.length > 0) return aliases;
   return MY_EMAIL ? [MY_EMAIL] : [];
 }
 
@@ -69,6 +72,9 @@ function doGet(e) {
     if (e.parameter.watchEmails !== undefined) {
       PropertiesService.getScriptProperties().setProperty("WATCH_EMAILS", e.parameter.watchEmails);
     }
+    if (e.parameter.myAliases !== undefined) {
+      PropertiesService.getScriptProperties().setProperty("MY_ALIASES", e.parameter.myAliases);
+    }
     return ContentService.createTextOutput(JSON.stringify({ ok: true }))
       .setMimeType(ContentService.MimeType.JSON);
   }
@@ -77,9 +83,26 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.action === "settings") {
     const settings = {
       watchEmails: PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "",
+      myAliases: PropertiesService.getScriptProperties().getProperty("MY_ALIASES") || "",
+      myEmailFallback: MY_EMAIL || "",
       scanHours: SCAN_HOURS,
     };
     return ContentService.createTextOutput(JSON.stringify(settings))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // awaitingをリセット（次の7時スキャンで再構築）
+  if (e && e.parameter && e.parameter.action === "resetAwaiting") {
+    saveAwaitingItems([]);
+    return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // awaitingを今すぐ再スキャン
+  if (e && e.parameter && e.parameter.action === "rescanAwaiting") {
+    saveAwaitingItems([]);
+    scanAwaitingReplies();
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, count: getAwaitingItems().length }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 
@@ -285,6 +308,9 @@ function doPost(e) {
   if (body.action === "saveSettings") {
     if (body.watchEmails !== undefined) {
       PropertiesService.getScriptProperties().setProperty("WATCH_EMAILS", body.watchEmails);
+    }
+    if (body.myAliases !== undefined) {
+      PropertiesService.getScriptProperties().setProperty("MY_ALIASES", body.myAliases);
     }
     return ContentService.createTextOutput(JSON.stringify({ ok: true }))
       .setMimeType(ContentService.MimeType.JSON);
