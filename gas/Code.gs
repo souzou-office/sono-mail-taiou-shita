@@ -233,7 +233,15 @@ function quickReplyCheck() {
 // 返信待ちの返信チェック（相手から返信来たら消す）
 function quickAwaitingCheck() {
   const items = getAwaitingItems();
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    appendDebugLogs([{
+      ts: new Date().toISOString(),
+      func: "quickAwaitingCheck",
+      action: "skip",
+      reason: "awaiting list is empty",
+    }]);
+    return;
+  }
   if (getMyEmails().length === 0) {
     appendDebugLogs([{
       ts: new Date().toISOString(),
@@ -330,6 +338,11 @@ function doOptions(e) {
 // メインスキャン（毎朝トリガー）
 // ============================================
 function scanEmails() {
+  const scanLogs = [{
+    ts: new Date().toISOString(),
+    func: "scanEmails",
+    action: "start",
+  }];
   const cutoff = new Date(Date.now() - SCAN_HOURS * 60 * 60 * 1000);
   // スクリプトプロパティ WATCH_EMAILS に監視アドレスをカンマ区切りで設定（例: ikeda@souzou-office.jp,info@souzou-office.jp）
   const watchEmails = (PropertiesService.getScriptProperties().getProperty("WATCH_EMAILS") || "").split(",").map(e => e.trim()).filter(Boolean);
@@ -364,6 +377,14 @@ function scanEmails() {
   console.log("未返信: " + unreplied.length + "件");
   if (unreplied.length === 0) {
     console.log("未返信0件のため終了（既存データは保持）");
+    scanLogs.push({
+      ts: new Date().toISOString(),
+      func: "scanEmails",
+      action: "done",
+      reason: "no unreplied",
+      threadsHit: threads.length,
+    });
+    appendDebugLogs(scanLogs);
     return;
   }
 
@@ -373,6 +394,15 @@ function scanEmails() {
   const afterSkip = unreplied.filter(m => !skipSet.has(extractEmailAddress(m.from).toLowerCase()));
 
   if (afterSkip.length === 0) {
+    scanLogs.push({
+      ts: new Date().toISOString(),
+      func: "scanEmails",
+      action: "done",
+      reason: "all skipped by skipList",
+      threadsHit: threads.length,
+      unreplied: unreplied.length,
+    });
+    appendDebugLogs(scanLogs);
     return;
   }
 
@@ -382,6 +412,15 @@ function scanEmails() {
   const afterLearned = afterSkip.filter(m => !learnedSkip.has(extractEmailAddress(m.from).toLowerCase()));
 
   if (afterLearned.length === 0) {
+    scanLogs.push({
+      ts: new Date().toISOString(),
+      func: "scanEmails",
+      action: "done",
+      reason: "all skipped by learned",
+      threadsHit: threads.length,
+      unreplied: unreplied.length,
+    });
+    appendDebugLogs(scanLogs);
     return;
   }
 
@@ -405,6 +444,15 @@ function scanEmails() {
   console.log(`スキャン結果: Gmail ${threads.length}件 → 未返信 ${unreplied.length}件 → スキップリスト後 ${afterSkip.length}件 → 学習除外後 ${afterLearned.length}件 → ルールフィルタ後 ${filtered.length}件 → AIに送信`);
 
   if (filtered.length === 0) {
+    scanLogs.push({
+      ts: new Date().toISOString(),
+      func: "scanEmails",
+      action: "done",
+      reason: "all filtered out",
+      threadsHit: threads.length,
+      unreplied: unreplied.length,
+    });
+    appendDebugLogs(scanLogs);
     return;
   }
 
@@ -485,12 +533,23 @@ ${mailList}`;
   // 既存データとマージ（古いのも残す）
   const existing = getStoredItems();
   const existingIds = new Set(existing.map(e => e.threadId));
-  const merged = [
-    ...existing,
-    ...actionItems.filter(a => !existingIds.has(a.threadId)),
-  ];
+  const newOnes = actionItems.filter(a => !existingIds.has(a.threadId));
+  const merged = [...existing, ...newOnes];
 
   saveItems(merged);
+
+  scanLogs.push({
+    ts: new Date().toISOString(),
+    func: "scanEmails",
+    action: "done",
+    threadsHit: threads.length,
+    unreplied: unreplied.length,
+    afterFilter: filtered.length,
+    aiJudged: actionItems.length,
+    addedNew: newOnes.length,
+    finalCount: merged.length,
+  });
+  appendDebugLogs(scanLogs);
 }
 
 // ============================================
@@ -498,8 +557,17 @@ ${mailList}`;
 // ============================================
 function checkReplies() {
   const items = getStoredItems();
-  if (items.length === 0) return;
+  if (items.length === 0) {
+    appendDebugLogs([{
+      ts: new Date().toISOString(),
+      func: "checkReplies",
+      action: "skip",
+      reason: "no stored items",
+    }]);
+    return;
+  }
 
+  const startedAt = new Date().toISOString();
   const stillNeeded = [];
   const needsJudgment = [];
 
@@ -556,12 +624,32 @@ ${details}`;
   }
 
   saveItems(stillNeeded);
+
+  appendDebugLogs([{
+    ts: startedAt,
+    func: "checkReplies",
+    action: "start",
+  }, {
+    ts: new Date().toISOString(),
+    func: "checkReplies",
+    action: "done",
+    before: items.length,
+    needsJudgment: needsJudgment.length,
+    after: stillNeeded.length,
+  }]);
 }
 
 // ============================================
 // 返信待ちスキャン（自分→相手で返事なし）
 // ============================================
 function scanAwaitingReplies() {
+  const startedAt = new Date().toISOString();
+  const logs = [{
+    ts: startedAt,
+    func: "scanAwaitingReplies",
+    action: "start",
+  }];
+
   const cutoff = new Date(Date.now() - SCAN_HOURS * 60 * 60 * 1000);
   const query = `after:${formatDateForSearch(cutoff)} from:me`;
   const threads = GmailApp.search(query, 0, 100);
@@ -594,20 +682,24 @@ function scanAwaitingReplies() {
     });
   }
 
-  // AI判定+要約を1回で
-  if (awaiting.length === 0) {
-    saveAwaitingItems([]);
-    return;
-  }
+  logs.push({
+    ts: new Date().toISOString(),
+    func: "scanAwaitingReplies",
+    action: "candidates",
+    threadsHit: threads.length,
+    candidates: awaiting.length,
+  });
 
+  // AI判定（候補があるときだけ）。候補ゼロでも既存リストは保持してマージへ進む。
   const awaitingItems = [];
-  for (let start = 0; start < awaiting.length; start += BATCH_SIZE) {
-    const batch = awaiting.slice(start, start + BATCH_SIZE);
-    const details = batch.map((m, i) =>
-      `=== メール ${i} ===\n件名: ${m.subject}\n宛先: ${m.to}\n本文:\n${m.snippet}`
-    ).join("\n\n");
+  if (awaiting.length > 0) {
+    for (let start = 0; start < awaiting.length; start += BATCH_SIZE) {
+      const batch = awaiting.slice(start, start + BATCH_SIZE);
+      const details = batch.map((m, i) =>
+        `=== メール ${i} ===\n件名: ${m.subject}\n宛先: ${m.to}\n本文:\n${m.snippet}`
+      ).join("\n\n");
 
-    const prompt = `以下は自分が送ったメールです。相手からの返信を待っているものだけ選んでください。
+      const prompt = `以下は自分が送ったメールです。相手からの返信を待っているものだけ選んでください。
 情報共有や挨拶だけのメールは除外。質問・依頼・確認を含むものだけ残して。
 
 返信待ちのメールについてJSON配列で返してください。該当なしなら[]。
@@ -615,48 +707,59 @@ function scanAwaitingReplies() {
 
 ${details}`;
 
-    const result = callClaude(prompt);
-    const match = result.match(/\[[\s\S]*\]/);
-    let judged = [];
-    try { judged = JSON.parse(match[0]); } catch { judged = []; }
+      const result = callClaude(prompt);
+      const match = result.match(/\[[\s\S]*\]/);
+      let judged = [];
+      try { judged = JSON.parse(match[0]); } catch { judged = []; }
 
-    for (const j of judged) {
-      if (j.index >= 0 && j.index < batch.length) {
-        awaitingItems.push({
-          threadId: batch[j.index].threadId,
-          subject: batch[j.index].subject,
-          to: batch[j.index].to,
-          date: batch[j.index].date,
-          snippet: batch[j.index].snippet,
-          summary: j.summary || "",
-          type: "awaiting_reply",
-        });
+      for (const j of judged) {
+        if (j.index >= 0 && j.index < batch.length) {
+          awaitingItems.push({
+            threadId: batch[j.index].threadId,
+            subject: batch[j.index].subject,
+            to: batch[j.index].to,
+            date: batch[j.index].date,
+            snippet: batch[j.index].snippet,
+            summary: j.summary || "",
+            type: "awaiting_reply",
+          });
+        }
       }
     }
   }
 
-  // 既存とマージ
+  // 既存とマージ（候補ゼロでも既存はそのまま保持し、相手返信が来た分だけ落とす）
   const existing = getAwaitingItems();
   const existingIds = new Set(existing.map(e => e.threadId));
-  const merged = [
-    ...existing.filter(e => {
-      // 返信が来たものは消す
-      if (getMyEmails().length === 0) return false;
-      try {
-        const thread = GmailApp.getThreadById(e.threadId);
-        if (!thread) return false;
-        const messages = thread.getMessages();
-        const savedDate = new Date(e.date);
-        const hasReplyFromOther = messages.some(m =>
-          m.getDate() > savedDate && !isFromMe(m.getFrom())
-        );
-        return !hasReplyFromOther;
-      } catch (_) { return false; }
-    }),
-    ...awaitingItems.filter(a => !existingIds.has(a.threadId)),
-  ];
+  const keptExisting = existing.filter(e => {
+    // 返信が来たものは消す
+    if (getMyEmails().length === 0) return false;
+    try {
+      const thread = GmailApp.getThreadById(e.threadId);
+      if (!thread) return false;
+      const messages = thread.getMessages();
+      const savedDate = new Date(e.date);
+      const hasReplyFromOther = messages.some(m =>
+        m.getDate() > savedDate && !isFromMe(m.getFrom())
+      );
+      return !hasReplyFromOther;
+    } catch (_) { return false; }
+  });
+  const newItems = awaitingItems.filter(a => !existingIds.has(a.threadId));
+  const merged = [...keptExisting, ...newItems];
 
   saveAwaitingItems(merged);
+
+  logs.push({
+    ts: new Date().toISOString(),
+    func: "scanAwaitingReplies",
+    action: "done",
+    existingBefore: existing.length,
+    keptFromExisting: keptExisting.length,
+    addedNew: newItems.length,
+    finalCount: merged.length,
+  });
+  appendDebugLogs(logs);
 }
 
 // ============================================
